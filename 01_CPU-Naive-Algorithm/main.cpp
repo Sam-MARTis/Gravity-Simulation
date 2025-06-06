@@ -5,17 +5,18 @@
 
 
 // Simulation properties
-#define PARTICLE_COUNT 100
-#define RAD 2.0f
+#define PARTICLE_COUNT 1000
+#define RAD 1.0f
 #define dRad 0.0f
 #define XMin 000.0f
 #define XMax 800.0f
 #define YMin 000.0f
-#define YMax 600.0f
-#define MAGNIFICATION 0.001f
+#define YMax 800.0f
+#define MAGNIFICATION 1.0f
 #define MASS 10.0f
+#define CENTER_MASS 10000.0f
 
-#define SUBSTEPS 501
+#define SUBSTEPS 10
 
 
 
@@ -23,19 +24,19 @@
 
 
 // Physics properties
-#define G 1e-7f
+#define G 0.10f
 #define RAD_MASS_CONSTANT 10.0f
-#define MAX_FORCE 1e-3f
+#define MAX_FORCE 1000.0f
 
 // //Memory objects
 
 struct Particle{
     float x;
     float y;
-    float xprev;
-    float yprev;
     float vx;
     float vy;
+    float ax;
+    float ay;
     float rad;
     float mass;
 };
@@ -54,15 +55,26 @@ float randf(float lb = 0.0f, float ub = 1.0f){
 
 // Supplementary functions
 void initialize_particles(Particle* particles, sf::CircleShape* shapes, int count){
+    const float centerX = (XMax + XMin) / 2.0f;
+    const float centerY = (YMax + YMin) / 2.0f;
     for(int i=0; i<count; i++){
         Particle& particle = particles[i];
         sf::CircleShape& shape = shapes[i];
-        particle.x = randf(XMin*MAGNIFICATION, XMax*MAGNIFICATION);
-        particle.y = randf(YMin*MAGNIFICATION, YMax*MAGNIFICATION);
-        particle.xprev = particle.x;
-        particle.yprev = particle.y;
-        particle.vx = 0.0f;
-        particle.vy = 0.0f;
+        // particle.x = randf(XMin*MAGNIFICATION, XMax*MAGNIFICATION);
+        // particle.y = randf(YMin*MAGNIFICATION, YMax*MAGNIFICATION);
+        // Initialize velocity to be in stable circular motion. centripital == gravitational force
+        float angle = randf(0.0f, 2.0f * 3.14159265358979323846f);
+        const float radius = MAGNIFICATION * randf(0.0f, 0.5f* (XMax - XMin) / 2.0f); // Use half the width as radius
+        particle.x = MAGNIFICATION * ((XMax + XMin) / 2.0f + radius * cosf(angle));
+        particle.y = MAGNIFICATION * ((YMax + YMin) / 2.0f + radius * sinf(angle));
+        // particle.x = MAGNIFICATION * (XMax + XMin) / 2.0f + RAD * cosf(angle);
+        // particle.y = MAGNIFICATION * (YMax + YMin) / 2.0f + RAD * sinf(angle);
+        float speed =  sqrtf(G * CENTER_MASS / (radius)); // Speed for stable circular motion
+        particle.vx = speed * sinf(angle);
+        particle.vy = -speed * cosf(angle);
+        
+        particle.ax = 0.0f;
+        particle.ay = 0.0f;
         particle.rad = RAD + randf(-dRad, dRad);
     
         // particle.mass = RAD_MASS_CONSTANT * particle.rad * particle.rad;
@@ -72,18 +84,18 @@ void initialize_particles(Particle* particles, sf::CircleShape* shapes, int coun
         shape.setPosition(particle.x, particle.y);
         shape.setFillColor(sf::Color::White);
     }
-    particles[count-1].x = MAGNIFICATION* (XMax + XMin) / 2.0f;
-    particles[count-1].y = MAGNIFICATION* (YMax + YMin) / 2.0f;
-    particles[count-1].xprev = particles[count-1].x;
-    particles[count-1].yprev = particles[count-1].y;
-    particles[count-1].rad = 3*RAD;
-    particles[count-1].mass = 1000.0f;
-    particles[count-1].vx = 0.0f;
-    particles[count-1].vy = 0.0f;
-    shapes[count-1].setRadius(particles[count-1].rad);
-    shapes[count-1].setOrigin(particles[count-1].rad, particles[count-1].rad);
-    shapes[count-1].setPosition(particles[count-1].x, particles[count-1].y);
-    shapes[count-1].setFillColor(sf::Color::Red);
+    particles[0].x = MAGNIFICATION* (XMax + XMin) / 2.0f;
+    particles[0].y = MAGNIFICATION* (YMax + YMin) / 2.0f;
+    particles[0].rad = 3*RAD;
+    particles[0].mass = CENTER_MASS;
+    particles[0].vx = 0.0f;
+    particles[0].vy = 0.0f;
+    particles[0].ax = 0.0f;
+    particles[0].ay = 0.0f;
+    shapes[0].setRadius(particles[0].rad);
+    shapes[0].setOrigin(particles[0].rad, particles[0].rad);
+    shapes[0].setPosition(particles[0].x, particles[0].y);
+    shapes[0].setFillColor(sf::Color::Red);
 
 
     std::cout << "Particles initialized." << std::endl;
@@ -97,43 +109,40 @@ void step_gravity(Particle* particles, int count){
         float fx = 0.0f;
         float fy = 0.0f;
 
-        for(int j=0; j<count; j++){
+        for(int j=i; j<count; j++){
             if(i == j) continue; // Skip self
 
             Particle& other = particles[j];
-            float dx = (other.x - particle.x)*100;
-            float dy = (other.y - particle.y)*100;
+            float dx = (other.x - particle.x);
+            float dy = (other.y - particle.y);
             float dist_sq = dx * dx + dy * dy;
 
 
-            if(dist_sq < 1e-6f) continue; // Avoid division by zero
+            if(dist_sq < 1e-2f) continue; // Avoid division by zero
 
             const float dist = sqrtf(dist_sq);
             float force = G * (particle.mass * other.mass) / dist_sq;
-            force = force > MAX_FORCE ? MAX_FORCE : force; // Limit force to MAX_FORCE
-            fx += force * (dx / dist);
-            fy += force * (dy / dist);
+            force = force > MAX_FORCE ? 0 : force; // Limit force to MAX_FORCE
+            particle.ax += force * (dx / dist)/particle.mass;
+            particle.ay += force * (dy / dist)/particle.mass;
+            other.ax -= force * (dx / dist)/other.mass;
+            other.ay -= force * (dy / dist)/other.mass;
 
         }
-        // if(fx*fx + fy*fy > MAX_FORCE * MAX_FORCE){
-        //     float norm = sqrtf(fx*fx + fy*fy);
-        //     fx = (fx / norm) * MAX_FORCE;
-        //     fy = (fy / norm) * MAX_FORCE;
-        // }
-        // Verlet integration
-        const float dt = SUBSTEPS_DT;
-        // float xnew = particle.x + (particle.x - particle.xprev) + fx * dt * dt / particle.mass;
-        // float ynew = particle.y + (particle.y - particle.yprev) + fy * dt * dt / particle.mass;
-        // particle.xprev = particle.x;
-        // particle.yprev = particle.y;
-        // particle.x = xnew;
-        // particle.y = ynew;
-        particle.vx += fx * dt / particle.mass;
-        particle.vy += fy * dt / particle.mass;
-        particle.x += particle.vx * dt;
-        particle.y += particle.vy * dt;
 
-
+    }
+    // Update positions and velocities
+    for(int i=0; i<count; i++){
+        Particle& particle = particles[i];
+        particle.x += particle.vx * SUBSTEPS_DT*0.5f;
+        particle.y += particle.vy * SUBSTEPS_DT*0.5f;
+        // if(i==100) std::cout << "Particle " << i << " position: (" << particle.x/MAGNIFICATION << ", " << particle.y/MAGNIFICATION << ")" << std::endl;
+        particle.vx += particle.ax * SUBSTEPS_DT;
+        particle.vy += particle.ay * SUBSTEPS_DT;
+        particle.x += particle.vx * SUBSTEPS_DT*0.5f;
+        particle.y += particle.vy * SUBSTEPS_DT*0.5f;
+        particle.ax = 0.0f; 
+        particle.ay = 0.0f;
     }
 
 }
@@ -154,7 +163,7 @@ int main()
     initialize_particles(particles, pshape, PARTICLE_COUNT);
 
 
-    sf::RenderWindow window(sf::VideoMode(800, 600), "Particle Simulation");
+    sf::RenderWindow window(sf::VideoMode(XMax-XMin, YMax-YMin), "Particle Simulation");
     window.setFramerateLimit(60);
 
     while (window.isOpen())
