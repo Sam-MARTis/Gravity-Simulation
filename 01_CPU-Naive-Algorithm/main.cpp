@@ -5,27 +5,27 @@
 
 
 // Simulation properties
-#define PARTICLE_COUNT 500
+#define PARTICLE_COUNT 100
 #define RAD 2.0f
 #define dRad 0.0f
-#define XMin 200.0f
-#define XMax 600.0f
-#define YMin 100.0f
-#define YMax 500.0f
+#define XMin 000.0f
+#define XMax 800.0f
+#define YMin 000.0f
+#define YMax 600.0f
 #define MAGNIFICATION 0.001f
 #define MASS 10.0f
 
-#define SUBSTEPS 51
+#define SUBSTEPS 501
 
 
 
-#define SUBSTEPS_DT 0.1f
+#define SUBSTEPS_DT 0.01f
 
 
 // Physics properties
-#define G 1e-10f
+#define G 1e-7f
 #define RAD_MASS_CONSTANT 10.0f
-#define MAX_FORCE 6e-2f
+#define MAX_FORCE 1e-3f
 
 // //Memory objects
 
@@ -34,6 +34,8 @@ struct Particle{
     float y;
     float xprev;
     float yprev;
+    float vx;
+    float vy;
     float rad;
     float mass;
 };
@@ -59,7 +61,10 @@ void initialize_particles(Particle* particles, sf::CircleShape* shapes, int coun
         particle.y = randf(YMin*MAGNIFICATION, YMax*MAGNIFICATION);
         particle.xprev = particle.x;
         particle.yprev = particle.y;
+        particle.vx = 0.0f;
+        particle.vy = 0.0f;
         particle.rad = RAD + randf(-dRad, dRad);
+    
         // particle.mass = RAD_MASS_CONSTANT * particle.rad * particle.rad;
         particle.mass = MASS;
         shape.setRadius(particle.rad);
@@ -73,10 +78,13 @@ void initialize_particles(Particle* particles, sf::CircleShape* shapes, int coun
     particles[count-1].yprev = particles[count-1].y;
     particles[count-1].rad = 3*RAD;
     particles[count-1].mass = 1000.0f;
+    particles[count-1].vx = 0.0f;
+    particles[count-1].vy = 0.0f;
     shapes[count-1].setRadius(particles[count-1].rad);
     shapes[count-1].setOrigin(particles[count-1].rad, particles[count-1].rad);
     shapes[count-1].setPosition(particles[count-1].x, particles[count-1].y);
     shapes[count-1].setFillColor(sf::Color::Red);
+
 
     std::cout << "Particles initialized." << std::endl;
 }
@@ -98,7 +106,7 @@ void step_gravity(Particle* particles, int count){
             float dist_sq = dx * dx + dy * dy;
 
 
-            if(dist_sq < 1e-12f) continue; // Avoid division by zero
+            if(dist_sq < 1e-6f) continue; // Avoid division by zero
 
             const float dist = sqrtf(dist_sq);
             float force = G * (particle.mass * other.mass) / dist_sq;
@@ -114,12 +122,17 @@ void step_gravity(Particle* particles, int count){
         // }
         // Verlet integration
         const float dt = SUBSTEPS_DT;
-        float xnew = particle.x + (particle.x - particle.xprev) + fx * dt * dt / particle.mass;
-        float ynew = particle.y + (particle.y - particle.yprev) + fy * dt * dt / particle.mass;
-        particle.xprev = particle.x;
-        particle.yprev = particle.y;
-        particle.x = xnew;
-        particle.y = ynew;
+        // float xnew = particle.x + (particle.x - particle.xprev) + fx * dt * dt / particle.mass;
+        // float ynew = particle.y + (particle.y - particle.yprev) + fy * dt * dt / particle.mass;
+        // particle.xprev = particle.x;
+        // particle.yprev = particle.y;
+        // particle.x = xnew;
+        // particle.y = ynew;
+        particle.vx += fx * dt / particle.mass;
+        particle.vy += fy * dt / particle.mass;
+        particle.x += particle.vx * dt;
+        particle.y += particle.vy * dt;
+
 
     }
 
