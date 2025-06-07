@@ -22,11 +22,17 @@
 
 #define SUBSTEPS_DT 0.01f
 
-
 // Physics properties
 #define G 0.10f
 #define RAD_MASS_CONSTANT 10.0f
 #define MAX_FORCE 1000.0f
+
+
+
+
+#define DEBUG
+
+
 
 int current_available_index = PARTICLE_COUNT;
 
@@ -46,15 +52,12 @@ struct Particle{
 struct Node{
     
     bool valid;
-    int leaf1idx;
-    int leaf2idx;
-    int leaf3idx;
-    int leaf4idx;
+    int leaves[4];
     float centerX;
     float centerY;
     float sideLength;
     
-    Node() : valid(false), leaf1idx(-1), leaf2idx(-1), leaf3idx(-1), leaf4idx(-1), centerX(0.0f), centerY(0.0f), sideLength(0.0f) {}
+    Node() : valid(false), leaves{-1, -1, -1, -1}, centerX(0.0f), centerY(0.0f), sideLength(0.0f) {}
 };
 
 
@@ -66,6 +69,9 @@ sf::CircleShape *pshape = new sf::CircleShape[PARTICLE_COUNT];
 //Helper functions
 float randf(float lb = 0.0f, float ub = 1.0f){
     return lb + (ub-lb)*(((float)rand())/((float)RAND_MAX));
+}
+void print(auto message){
+    std::cout << message << std::endl;
 }
 
 
@@ -176,11 +182,56 @@ void get_bounding_box(Particle* particles, int count, float* bounds){
 }
 
 
-void insert_particle(Particle& particle, Node* tree_array, float* bounds, int& index){
-    float midX = (bounds[0] + bounds[2]) * 0.5f;
-    float midY = (bounds[1] + bounds[3]) * 0.5f;
-    int insert_index = (particle.x > midX) + 2*(particle.y > midY);
-    if(index*5)
+void insert_particle(Particle* particles, const int pidx, Node* tree_array, const int index){
+    Node& node = tree_array[index];
+    #ifdef DEBUG
+    if(!node.valid) print("Node is not valid, cannot insert particle.");
+    #endif
+    Particle& particle = particles[pidx];
+    int insert_index = (particle.x > node.centerX) + 2 * (particle.y > node.centerY);
+    if(node.leaves[insert_index] == -1){
+        node.leaves[insert_index] = pidx;
+        return;
+    }else if (node.leaves[insert_index] >= PARTICLE_COUNT) //It has a node. Go to the node pointed to
+    {
+        insert_particle(particles, pidx, tree_array, node.leaves[insert_index] - PARTICLE_COUNT);
+        return;
+    }
+
+    else if (node.leaves[insert_index]< PARTICLE_COUNT)
+    {
+        // Node is a leaf, we need to split it
+        int old_particle_idx = node.leaves[insert_index];
+        int new_node_idx = current_available_index++;
+        node.leaves[insert_index] = new_node_idx + PARTICLE_COUNT ; // Update the current node to point to the new node
+        Node& new_node = tree_array[new_node_idx];
+        new_node.valid = true;
+        // if(insert_index == 0){
+        //     new_node.centerY = node.centerY - node.sideLength * 0.5f; // Upper half
+        //     new_node.centerX = node.centerX - node.sideLength * 0.5f; // Right half
+        // }
+        // if(insert_index == 1){
+        //     new_node.centerY = node.centerY - node.sideLength * 0.5f; // Lower half
+        //     new_node.centerX = node.centerX + node.sideLength * 0.5f; // Left half
+        // }
+        // if(insert_index == 2){
+        //     new_node.centerY = node.centerY + node.sideLength * 0.5f; // Upper half
+        //     new_node.centerX = node.centerX - node.sideLength * 0.5f; // Right half
+        // }
+        // if(insert_index == 3){
+        //     new_node.centerY = node.centerY + node.sideLength * 0.5f; // Lower half
+        //     new_node.centerX = node.centerX + node.sideLength * 0.5f; // Left half
+        // }
+        new_node.centerY = node.centerY  + node.sideLength*(  1.0f - 2.0f*(insert_index<=1));
+        new_node.centerX = node.centerX  + node.sideLength*(- 1.0f + 2.0f*(insert_index%2));
+        new_node.sideLength = node.sideLength *0.5f; // Halve the side length
+        insert_particle(particles, old_particle_idx, tree_array, new_node_idx); // Insert the old particle into the new node
+        insert_particle(particles, pidx, tree_array, new_node_idx); // Insert the new particle into the new node
+        return;
+    }
+
+
+
     
     // int index = current_available_index++;
 }
