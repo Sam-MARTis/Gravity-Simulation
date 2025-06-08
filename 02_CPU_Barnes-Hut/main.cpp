@@ -25,6 +25,7 @@
 #define MAX_FORCE 1000.0f
 
 #define DEBUG
+#define DEBUG2
 
 int current_available_index = PARTICLE_COUNT;
 
@@ -190,7 +191,7 @@ void get_bounding_box(Particle *particles, int count, float *bounds)
     // bounds[3] = maxY;
 }
 
-void insert_particle(const Particle *particles, const int pidx, Node *tree_array, const int index)
+void insert_particle(const Particle *particles, Node *tree_array, const int pidx, const int index)
 {
     Node &node = tree_array[index];
 #ifdef DEBUG
@@ -206,7 +207,7 @@ void insert_particle(const Particle *particles, const int pidx, Node *tree_array
     }
     else if (node.leaves[insert_index] >= PARTICLE_COUNT) // It has a node. Go to the node pointed to
     {
-        insert_particle(particles, pidx, tree_array, node.leaves[insert_index] - PARTICLE_COUNT);
+        insert_particle(particles, tree_array, pidx, node.leaves[insert_index] - PARTICLE_COUNT);
         return;
     }
 
@@ -244,8 +245,8 @@ void insert_particle(const Particle *particles, const int pidx, Node *tree_array
         new_node.centerY = node.centerY + node.sideLength * (1.0f - 2.0f * (insert_index <= 1));
         new_node.centerX = node.centerX + node.sideLength * (-1.0f + 2.0f * (insert_index % 2));
         new_node.sideLength = node.sideLength * 0.5f;                           // Halve the side length
-        insert_particle(particles, old_particle_idx, tree_array, new_node_idx); // Insert the old particle into the new node
-        insert_particle(particles, pidx, tree_array, new_node_idx);             // Insert the new particle into the new node
+        insert_particle(particles, tree_array, old_particle_idx, new_node_idx); // Insert the old particle into the new node
+        insert_particle(particles, tree_array, pidx, new_node_idx);             // Insert the new particle into the new node
         return;
     }
 
@@ -267,7 +268,7 @@ int construct_trees(Node *tree_array, const Particle *particles, const int pcoun
 
     for (int i = 0; i < pcount; i++)
     {
-        insert_particle(particles, i, tree_array, 0);
+        insert_particle(particles, tree_array, i, 0);
     }
     return current_available_index;
 }
@@ -289,8 +290,9 @@ void computer_tree_coms(const Particle *particle, Node *tree_array, const int pc
         float mass = 0.0f;
         for (int j = 0; j < 4; j++)
         {
-            const int& leaf = node.leaves[j];
-            if (leaf == -1) continue;
+            const int &leaf = node.leaves[j];
+            if (leaf == -1)
+                continue;
             if (leaf >= PARTICLE_COUNT)
             { // It has a node
                 Node &child_node = tree_array[leaf - PARTICLE_COUNT];
@@ -317,7 +319,8 @@ void computer_tree_coms(const Particle *particle, Node *tree_array, const int pc
                 comy += particle.y * particle.mass;
                 mass += particle.mass;
             }
-            else{
+            else
+            {
                 print("Unknown case in computer_tree_coms, leaf index: " + std::to_string(leaf));
                 exit(1);
             }
@@ -328,6 +331,70 @@ void computer_tree_coms(const Particle *particle, Node *tree_array, const int pc
 #ifdef DEBUG
         node.com_calculated = true;
 #endif
+    }
+}
+
+// void compute_forces_at_point_by_node(const Node* tree_array, const int ncount, )
+void compute_forces_at_point_bh(const Node *tree_array, const int ncount, const int nidx, const float &x, const float &y, const float &theta, float &fx, float &fy)
+{
+    int index = 0;
+    bool leaf = false;
+#ifdef DEBUG
+    if (!tree_array[nidx].valid)
+    {
+        print("Node is not valid, cannot compute forces.");
+        exit(1);
+    }
+#endif
+    const float dx = tree_array[nidx].mass_x - x;
+    const float dy = tree_array[nidx].mass_y - y;
+    const float dist_sq = dx * dx + dy * dy;
+    const float self_theta_sq = (tree_array[nidx].sideLength*tree_array[nidx].sideLength)/dist_sq;
+    if (self_theta_sq < theta * theta){
+        // If the node is far enough, treat it as a single particle
+        const float dist = sqrtf(dist_sq);
+        #ifdef DEBUG2
+        if (dist < 1e-2f) return;
+        #endif
+        const float force = G * (tree_array[nidx].mass) / dist_sq;
+        fx += force * (dx / dist);
+        fy += force * (dy / dist);
+        return;
+    }else{
+        for(int i=0; i<4; i++){
+            int child_index = tree_array[nidx].leaves[i];
+            if(child_index == -1) continue; 
+            if(child_index >= PARTICLE_COUNT){
+                compute_forces_at_point_bh(tree_array, ncount, child_index - PARTICLE_COUNT, x, y, theta, fx, fy);
+            }else if(child_index >=0){
+                // It's a particle
+                const Particle &particle = particles[child_index];
+                const float dx_p = particle.x - x;
+                const float dy_p = particle.y - y;
+                const float dist_sq_p = dx_p * dx_p + dy_p * dy_p;
+                if (dist_sq_p < 1e-2f) continue; // Avoid division by zero
+                const float dist_p = sqrtf(dist_sq_p);
+                const float force_p = G * (particle.mass) / dist_sq_p;
+                fx += force_p * (dx_p / dist_p);
+                fy += force_p * (dy_p / dist_p);
+            }
+            else
+            {
+                print("Unknown case in compute_forces_at_point_bh, child index: " + std::to_string(child_index));
+                exit(1);
+            }
+        }
+    }
+
+}
+void calculate_forces_barnes_hut(Particle *particles, const Node *tree_array, const int pcount, const int ncount, const float theta)
+{
+    for (int i = 0; i < pcount; i++)
+    {
+        Particle &target = particles[i];
+        const float x = target.x;
+        const float y = target.y;
+        // Todo
     }
 }
 

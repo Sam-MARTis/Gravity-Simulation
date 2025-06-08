@@ -51,7 +51,7 @@ int main(){
     //     print(tree[i].valid);
     // }
 
-
+    1<2? print("1 executed") : print("2 executed");
     
     return 0;
 }
