@@ -46,14 +46,23 @@ struct Node
 {
 
     bool valid;
+    #ifdef DEBUG
+    bool com_calculated;
+    #endif
     int leaves[4];
     float centerX;
     float centerY;
-    float sideLength;
+    float sideLength; 
     float mass_x;
     float mass_y;
 
-    Node() : valid(false), leaves{-1, -1, -1, -1}, centerX(0.0f), centerY(0.0f), sideLength(0.0f), mass_x(0.0f), mass_y(0.0f) {}
+    #ifdef DEBUG 
+    Node() : valid(false), 
+    com_calculated(false),
+    leaves{-1, -1, -1, -1}, centerX(0.0f), centerY(0.0f), sideLength(0.0f), mass_x(-42.0f), mass_y(-42.0f) {}
+    #else
+    Node() : valid(false), leaves{-1, -1, -1, -1}, centerX(0.0f), centerY(0.0f), sideLength(0.0f), mass_x(-42.0f), mass_y(-42.0f) {}
+    #endif
 };
 
 Particle *particles = new Particle[PARTICLE_COUNT];
@@ -180,15 +189,15 @@ void get_bounding_box(Particle *particles, int count, float *bounds)
     // bounds[3] = maxY;
 }
 
-void insert_particle(Particle *particles, const int pidx, Node *tree_array, const int index)
+void insert_particle(const Particle *particles, const int pidx, Node *tree_array, const int index)
 {
     Node &node = tree_array[index];
 #ifdef DEBUG
     if (!node.valid)
         print("Node is not valid, cannot insert particle.");
 #endif
-    Particle &particle = particles[pidx];
-    int insert_index = (particle.x > node.centerX) + 2 * (particle.y > node.centerY);
+    // Particle particle = particles[pidx];
+    int insert_index = (particles[pidx].x > node.centerX) + 2 * (particles[pidx].y > node.centerY);
     if (node.leaves[insert_index] == -1)
     {
         node.leaves[insert_index] = pidx;
@@ -241,7 +250,7 @@ void insert_particle(Particle *particles, const int pidx, Node *tree_array, cons
 
     // int index = current_available_index++;
 }
-int construct_trees(Node *tree_array, Particle *particles, int pcount, float *bounds)
+int construct_trees(Node *tree_array, const Particle *particles, const int pcount, float *bounds)
 {
     delete[] tree_array;
     tree_array = new Node[MAXIMUM_TREE_SIZE];
@@ -261,6 +270,20 @@ int construct_trees(Node *tree_array, Particle *particles, int pcount, float *bo
     }
     return current_available_index;
 }
+
+void computer_tree_coms(const Particle *particle, Node *tree_array, const int pcount, const int ncount){
+    for(int i = ncount-1; i>=0; i--){
+        Node &node = tree_array[i];
+        #ifdef DEBUG
+        if (!node.valid){
+            print("Node is not valid, cannot compute COM.");
+            exit(1);
+        }
+        #endif
+
+    }
+}
+
 
 void step_particles(Particle *particles, int count)
 {

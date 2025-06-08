@@ -46,10 +46,10 @@ int main(){
     // print(&n.leaf2idx);
     // print(&n.leaf3idx);
 
-    Node *tree = new Node[100];
-    for(int i = 0; i < 100; i++){
-        print(tree[i].valid);
-    }
+    // Node *tree = new Node[100];
+    // for(int i = 0; i < 100; i++){
+    //     print(tree[i].valid);
+    // }
 
 
     
