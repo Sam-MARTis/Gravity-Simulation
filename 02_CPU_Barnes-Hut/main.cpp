@@ -270,6 +270,10 @@ int construct_trees(Node *tree_array, const Particle *particles, const int pcoun
     {
         insert_particle(particles, tree_array, i, 0);
     }
+    Node *temp = new Node[current_available_index];
+    std::copy(tree_array, tree_array + current_available_index, temp);
+    delete[] tree_array;
+    tree_array = temp;
     return current_available_index;
 }
 
@@ -394,7 +398,11 @@ void calculate_forces_barnes_hut(Particle *particles, const Node *tree_array, co
         Particle &target = particles[i];
         const float x = target.x;
         const float y = target.y;
-        // Todo
+        float fx = 0.0f;
+        float fy = 0.0f;
+        compute_forces_at_point_bh(tree_array, ncount, 0, x, y, theta, fx, fy);
+        target.ax = fx / target.mass;
+        target.ay = fy / target.mass;
     }
 }
 
