@@ -46,23 +46,24 @@ struct Node
 {
 
     bool valid;
-    #ifdef DEBUG
+#ifdef DEBUG
     bool com_calculated;
-    #endif
+#endif
     int leaves[4];
     float centerX;
     float centerY;
-    float sideLength; 
+    float sideLength;
     float mass_x;
     float mass_y;
+    float mass;
 
-    #ifdef DEBUG 
-    Node() : valid(false), 
-    com_calculated(false),
-    leaves{-1, -1, -1, -1}, centerX(0.0f), centerY(0.0f), sideLength(0.0f), mass_x(-42.0f), mass_y(-42.0f) {}
-    #else
-    Node() : valid(false), leaves{-1, -1, -1, -1}, centerX(0.0f), centerY(0.0f), sideLength(0.0f), mass_x(-42.0f), mass_y(-42.0f) {}
-    #endif
+#ifdef DEBUG
+    Node() : valid(false),
+             com_calculated(false),
+             leaves{-1, -1, -1, -1}, centerX(0.0f), centerY(0.0f), sideLength(0.0f), mass_x(-42.0f), mass_y(-42.0f), mass(0.0f) {}
+#else
+    Node() : valid(false), leaves{-1, -1, -1, -1}, centerX(0.0f), centerY(0.0f), sideLength(0.0f), mass_x(-42.0f), mass_y(-42.0f), mass(0.0f) {}
+#endif
 };
 
 Particle *particles = new Particle[PARTICLE_COUNT];
@@ -271,19 +272,64 @@ int construct_trees(Node *tree_array, const Particle *particles, const int pcoun
     return current_available_index;
 }
 
-void computer_tree_coms(const Particle *particle, Node *tree_array, const int pcount, const int ncount){
-    for(int i = ncount-1; i>=0; i--){
+void computer_tree_coms(const Particle *particle, Node *tree_array, const int pcount, const int ncount)
+{
+    for (int i = ncount - 1; i >= 0; i--)
+    {
         Node &node = tree_array[i];
-        #ifdef DEBUG
-        if (!node.valid){
+#ifdef DEBUG
+        if (!node.valid)
+        {
             print("Node is not valid, cannot compute COM.");
             exit(1);
         }
-        #endif
-
+#endif
+        float comx = 0.0f;
+        float comy = 0.0f;
+        float mass = 0.0f;
+        for (int j = 0; j < 4; j++)
+        {
+            const int& leaf = node.leaves[j];
+            if (leaf == -1) continue;
+            if (leaf >= PARTICLE_COUNT)
+            { // It has a node
+                Node &child_node = tree_array[leaf - PARTICLE_COUNT];
+#ifdef DEBUG
+                if (!child_node.valid)
+                {
+                    print("Child node is not valid, cannot compute COM.");
+                    exit(1);
+                }
+                if (!child_node.com_calculated)
+                {
+                    print("Child node COM not calculated, cannot compute parent COM.");
+                    exit(1);
+                }
+#endif
+                comx += child_node.mass_x * child_node.mass;
+                comy += child_node.mass_y * child_node.mass;
+                mass += child_node.mass;
+            }
+            else if (leaf >= 0)
+            { // It has a particle
+                Particle &particle = particles[node.leaves[j]];
+                comx += particle.x * particle.mass;
+                comy += particle.y * particle.mass;
+                mass += particle.mass;
+            }
+            else{
+                print("Unknown case in computer_tree_coms, leaf index: " + std::to_string(leaf));
+                exit(1);
+            }
+        }
+        node.mass_x = comx / mass;
+        node.mass_y = comy / mass;
+        node.mass = mass;
+#ifdef DEBUG
+        node.com_calculated = true;
+#endif
     }
 }
-
 
 void step_particles(Particle *particles, int count)
 {
