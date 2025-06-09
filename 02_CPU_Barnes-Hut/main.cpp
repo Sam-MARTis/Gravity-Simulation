@@ -4,25 +4,31 @@
 #include <SFML/Graphics.hpp>
 
 // Simulation properties
-#define PARTICLE_COUNT 10000
+#define PARTICLE_COUNT 1000
+#define CLOUD_VEL_MULTIPLIER 0.99f
 #define RAD 1.0f
 #define dRad 0.0f
 #define XMin 000.0f
 #define XMax 800.0f
 #define YMin 000.0f
 #define YMax 800.0f
+#define INNER_RADII 0.2f
+#define OUTER_RADII 0.9f
+
 #define MAGNIFICATION 1.0f
-#define MASS 1.0f
-#define CENTER_MASS 10000.0f
+#define MASS 100.0f
+#define CENTER_MASS 1000.0f
+#define CENTER_MASS_COUNT 2
+#define D_CENTER 5.0f
 #define DAMPING 0.4f
 #define SUBSTEPS 10
 
 
 
 // Numerical properties
-#define SUBSTEPS_DT 0.01f
-#define MAXIMUM_TREE_SIZE (PARTICLE_COUNT)
-#define THETA 1.5f
+#define SUBSTEPS_DT 0.001f
+#define MAXIMUM_TREE_SIZE (10*PARTICLE_COUNT)
+#define THETA 1.0f
 #define SOFTENING_EPSILON 0.01f 
 #define NORM2(x, y) ((x) * (x) + (y) * (y)) 
 
@@ -31,7 +37,7 @@
 #define G 0.10f
 #define RAD_MASS_CONSTANT 10.0f
 #define MAX_FORCE 10.0f
-#define MAX_ACCELERATION 10.0f
+#define MAX_ACCELERATION 1000.0f
 
 
 // #define DEBUG
@@ -109,12 +115,12 @@ void init_particles(Particle *particles, sf::CircleShape *shapes, int count)
         // particle.y = randf(YMin*MAGNIFICATION, YMax*MAGNIFICATION);
         // Initialize velocity to be in stable circular motion. centripital == gravitational force
         float angle = randf(0.0f, 2.0f * 3.14159265358979323846f);
-        const float radius = MAGNIFICATION * randf( 0.2f * (XMax - XMin) *0.5f, 0.7f * (XMax - XMin) *0.5f); // Use half the width as radius
+        const float radius = MAGNIFICATION * randf( INNER_RADII * (XMax - XMin) *0.5f, OUTER_RADII * (XMax - XMin) *0.5f); // Use half the width as radius
         particle.x = MAGNIFICATION * ((XMax + XMin) / 2.0f + radius * cosf(angle));
         particle.y = MAGNIFICATION * ((YMax + YMin) / 2.0f + radius * sinf(angle));
         // particle.x = MAGNIFICATION * (XMax + XMin) / 2.0f + RAD * cosf(angle);
         // particle.y = MAGNIFICATION * (YMax + YMin) / 2.0f + RAD * sinf(angle);
-        float speed = sqrtf(G * CENTER_MASS / (radius)); // Speed for stable circular motion
+        float speed = CLOUD_VEL_MULTIPLIER* sqrtf(G * CENTER_MASS * CENTER_MASS_COUNT / (radius)); // Speed for stable circular motion
         particle.vx = speed * sinf(angle);
         particle.vy = -speed * cosf(angle);
 
@@ -129,18 +135,23 @@ void init_particles(Particle *particles, sf::CircleShape *shapes, int count)
         shape.setPosition(particle.x, particle.y);
         shape.setFillColor(sf::Color::White);
     }
-    particles[0].x = MAGNIFICATION * (XMax + XMin) / 2.0f;
-    particles[0].y = MAGNIFICATION * (YMax + YMin) / 2.0f;
-    particles[0].rad = 3 * RAD;
-    particles[0].mass = CENTER_MASS;
-    particles[0].vx = 0.0f;
-    particles[0].vy = 0.0f;
-    particles[0].ax = 0.0f;
-    particles[0].ay = 0.0f;
-    shapes[0].setRadius(particles[0].rad);
-    shapes[0].setOrigin(particles[0].rad, particles[0].rad);
-    shapes[0].setPosition(particles[0].x, particles[0].y);
-    shapes[0].setFillColor(sf::Color::Red);
+    particles[0].x = D_CENTER+ (MAGNIFICATION * (XMax + XMin) / 2.0f);
+    particles[0].y = (MAGNIFICATION * (YMax + YMin) / 2.0f);
+    particles[1].x = -D_CENTER + (MAGNIFICATION * (XMax + XMin) / 2.0f);
+    particles[1].y = (MAGNIFICATION * (YMax + YMin) / 2.0f);
+    particles[1].vy = sqrtf(G*CENTER_MASS/(4*D_CENTER));
+    particles[0].vy = -particles[1].vy;
+    for(int i = 0; i< 2; i++){
+    particles[i].rad = 5 * RAD;
+    particles[i].mass = CENTER_MASS;
+    particles[i].vx = 0.0f;
+    particles[i].ax = 0.0f;
+    particles[i].ay = 0.0f;
+    shapes[i].setRadius(particles[i].rad);
+    shapes[i].setOrigin(particles[i].rad, particles[i].rad);
+    shapes[i].setPosition(particles[i].x, particles[i].y);
+    shapes[i].setFillColor(sf::Color::Red);
+    }
 
     std::cout << "Particles initialized." << std::endl;
 }
