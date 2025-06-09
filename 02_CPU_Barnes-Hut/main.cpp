@@ -4,7 +4,7 @@
 #include <SFML/Graphics.hpp>
 
 // Simulation properties
-#define PARTICLE_COUNT 1000
+#define PARTICLE_COUNT 8
 #define RAD 1.0f
 #define dRad 0.0f
 #define XMin 000.0f
@@ -19,7 +19,7 @@
 
 // Numerical properties
 #define SUBSTEPS_DT 0.01f
-#define MAXIMUM_TREE_SIZE (5 * PARTICLE_COUNT)
+#define MAXIMUM_TREE_SIZE (100)
 #define THETA 0.5f
 #define SOFTENING_EPSILON 0.01f 
 #define NORM2(x, y) ((x) * (x) + (y) * (y)) 
@@ -170,6 +170,7 @@ void compute_forces_naive(Particle *particles, int count)
 
 void get_bounding_box(const Particle *particles, int count, float *bounds)
 {
+    print("Getting bounding box for particles...");
     float minX = particles[0].x;
     float minY = particles[0].y;
     float maxX = particles[0].x;
@@ -195,24 +196,32 @@ void get_bounding_box(const Particle *particles, int count, float *bounds)
     // bounds[1] = minY;
     // bounds[2] = maxX;
     // bounds[3] = maxY;
+    print("Bounding box calculaed successfully");
 }
 
-void insert_particle(const Particle *particles, Node *tree_array, const int pidx, const int index)
+void insert_particle(const Particle *particles, Node *tree_array, const int pidx, const int nidx)
 {
-    Node &node = tree_array[index];
+    // print("Inserting particle " + std::to_string(pidx) + " into node " + std::to_string(nidx));
+    Node &node = tree_array[nidx];
 #ifdef DEBUG
     if (!node.valid)
         print("Node is not valid, cannot insert particle.");
 #endif
     // Particle particle = particles[pidx];
     int insert_index = (particles[pidx].x > node.centerX) + 2 * (particles[pidx].y > node.centerY);
+    print("particle " + std::to_string(pidx) + " -> node " + std::to_string(nidx) + " || index " + std::to_string(insert_index) + ", center: (" + std::to_string(node.centerX) + ", " + std::to_string(node.centerY) + "), side length: " + std::to_string(node.sideLength));
     if (node.leaves[insert_index] == -1)
     {
+        print("Node empty, inserting particle " + std::to_string(pidx) + " -> node " + std::to_string(nidx) + " at index " + std::to_string(insert_index));
+        // exit(1);
         node.leaves[insert_index] = pidx;
+        print("Particle " + std::to_string(pidx) + " inserted successfully at index " + std::to_string(insert_index));
+        print("");
         return;
     }
     else if (node.leaves[insert_index] >= PARTICLE_COUNT) // It has a node. Go to the node pointed to
     {
+        print("Node is not empty, inserting particle " + std::to_string(pidx) + " into child node " + std::to_string(node.leaves[insert_index] - PARTICLE_COUNT));
         insert_particle(particles, tree_array, pidx, node.leaves[insert_index] - PARTICLE_COUNT);
         return;
     }
@@ -221,33 +230,19 @@ void insert_particle(const Particle *particles, Node *tree_array, const int pidx
     {
         // Node is a leaf, we need to split it
         int old_particle_idx = node.leaves[insert_index];
-        int new_node_idx = current_available_index++;
+        int new_node_idx = ++current_available_index;
+        print(new_node_idx);
 #ifdef DEBUG
-        if (current_available_index >= MAXIMUM_TREE_SIZE)
+        if (current_available_index >= MAXIMUM_TREE_SIZE-1)
         {
             print("Maximum tree size reached, cannot insert more particles.");
+            print("Current available index: " + std::to_string(current_available_index));
             exit(1);
         }
 #endif
         node.leaves[insert_index] = new_node_idx + PARTICLE_COUNT; // Update the current node to point to the new node
         Node &new_node = tree_array[new_node_idx];
         new_node.valid = true;
-        // if(insert_index == 0){
-        //     new_node.centerY = node.centerY - node.sideLength * 0.5f; // Upper half
-        //     new_node.centerX = node.centerX - node.sideLength * 0.5f; // Right half
-        // }
-        // if(insert_index == 1){
-        //     new_node.centerY = node.centerY - node.sideLength * 0.5f; // Lower half
-        //     new_node.centerX = node.centerX + node.sideLength * 0.5f; // Left half
-        // }
-        // if(insert_index == 2){
-        //     new_node.centerY = node.centerY + node.sideLength * 0.5f; // Upper half
-        //     new_node.centerX = node.centerX - node.sideLength * 0.5f; // Right half
-        // }
-        // if(insert_index == 3){
-        //     new_node.centerY = node.centerY + node.sideLength * 0.5f; // Lower half
-        //     new_node.centerX = node.centerX + node.sideLength * 0.5f; // Left half
-        // }
         new_node.centerY = node.centerY + node.sideLength * 0.25f * (1 - 2 * (insert_index <= 1));
         new_node.centerX = node.centerX + node.sideLength * 0.25f * (2 * (insert_index % 2) - 1);
         new_node.sideLength = node.sideLength * 0.5f;                           // Halve the side length
@@ -258,10 +253,13 @@ void insert_particle(const Particle *particles, Node *tree_array, const int pidx
 
     // int index = current_available_index++;
 }
-int construct_trees(const Particle *particles, Node *tree_array, const int pcount, float *bounds)
+void construct_trees(const Particle *particles, Node *tree_array, const int pcount, float *bounds)
 {
+    print("Deleting old tree array...");
     delete[] tree_array;
+    print("Constructing tree inner...");
     tree_array = new Node[MAXIMUM_TREE_SIZE];
+    print("Tree array constructed successfully. Size: " + std::to_string(MAXIMUM_TREE_SIZE));
     current_available_index = 0;
     tree_array[0].valid = true;
     tree_array[0].centerX = bounds[0];
@@ -272,17 +270,22 @@ int construct_trees(const Particle *particles, Node *tree_array, const int pcoun
     tree_array[0].leaves[2] = -1;
     tree_array[0].leaves[3] = -1;
 
+    print("Inserting particles into tree...");
     for (int i = 0; i < pcount; i++)
     {
         insert_particle(particles, tree_array, i, 0);
     }
+    print("Particles inserted successfully. Current available index: " + std::to_string(current_available_index));
 
+    print("Resizing tree array to current available index...");
     Node *temp = new Node[current_available_index];
     std::copy(tree_array, tree_array + current_available_index, temp);
+    print("Tree array resized successfully. New size: " + std::to_string(current_available_index));
+    print("Deleting old tree array...");
     delete[] tree_array;
+    print("Assigning new tree array to tree_array pointer...");
     tree_array = temp;
 
-    return current_available_index;
 }
 
 void computer_tree_coms(const Particle *particles, Node *tree_array, const int pcount, const int ncount)
@@ -443,9 +446,16 @@ void calculate_accelerations_barnes_hut(Particle *particles, const Node *tree_ar
 void perform_barnes_hut(Particle *particles, Node *tree_array, const int pcount, const float theta){
     float bounds[3];
     get_bounding_box(particles, pcount, bounds);
-    int ncount = construct_trees(particles, tree_array, pcount, bounds);
+    print("Constructing trees...");
+    construct_trees(particles, tree_array, pcount, bounds);
+    const int ncount = current_available_index+1;
+    print("Trees constructed successfully. Number of nodes: " + std::to_string(ncount));
+    print("Computing center of mass for nodes...");
     computer_tree_coms(particles, tree_array, pcount, ncount);
+    print("Center of mass computed successfully.");
+    print("Calculating accelerations using Barnes-Hut algorithm...");
     calculate_accelerations_barnes_hut(particles, tree_array, pcount, ncount, theta);
+    print("Accelerations calculated successfully.");
 }
 
 void step_particles(Particle *particles, int count)
