@@ -4,7 +4,7 @@
 #include <SFML/Graphics.hpp>
 
 // Simulation properties
-#define PARTICLE_COUNT 3100
+#define PARTICLE_COUNT 10000
 #define RAD 1.0f
 #define dRad 0.0f
 #define XMin 000.0f
@@ -12,15 +12,17 @@
 #define YMin 000.0f
 #define YMax 800.0f
 #define MAGNIFICATION 1.0f
-#define MASS 10.0f
+#define MASS 1.0f
 #define CENTER_MASS 10000.0f
-#define SUBSTEPS 20
+#define DAMPING 0.4f
+#define SUBSTEPS 10
+
 
 
 // Numerical properties
 #define SUBSTEPS_DT 0.01f
 #define MAXIMUM_TREE_SIZE (PARTICLE_COUNT)
-#define THETA 1.0f
+#define THETA 1.5f
 #define SOFTENING_EPSILON 0.01f 
 #define NORM2(x, y) ((x) * (x) + (y) * (y)) 
 
@@ -495,6 +497,15 @@ void step_particles(Particle *particles, int count)
     for (int i = 0; i < count; i++)
     {
         Particle &particle = particles[i];
+        float mag_acc_sq = NORM2(particle.ax, particle.ay);
+        if (mag_acc_sq > MAX_ACCELERATION * MAX_ACCELERATION){
+            // Limit acceleration to MAX_ACCELERATION
+            float mag_acc_inv = 1/sqrtf(mag_acc_sq);
+            particle.ax = (particle.ax * mag_acc_inv) * MAX_ACCELERATION;
+            particle.ay = (particle.ay * mag_acc_inv) * MAX_ACCELERATION;
+        }
+
+
         particle.x += particle.vx * SUBSTEPS_DT * 0.5f;
         particle.y += particle.vy * SUBSTEPS_DT * 0.5f;
         particle.vx += particle.ax * SUBSTEPS_DT;
@@ -508,19 +519,19 @@ void step_particles(Particle *particles, int count)
 
         if(particle.x < XMin*MAGNIFICATION) {
             particle.x = XMin * MAGNIFICATION;
-            particle.vx = -particle.vx;
+            particle.vx = -DAMPING*particle.vx;
         }
         if(particle.x > XMax*MAGNIFICATION) {
             particle.x = XMax * MAGNIFICATION;
-            particle.vx = -particle.vx;
+            particle.vx = -DAMPING*particle.vx;
         }
         if(particle.y < YMin*MAGNIFICATION) {
             particle.y = YMin * MAGNIFICATION;
-            particle.vy = -particle.vy;
+            particle.vy = -DAMPING*particle.vy;
         }
         if(particle.y > YMax*MAGNIFICATION) {
             particle.y = YMax * MAGNIFICATION;
-            particle.vy = -particle.vy;
+            particle.vy = -DAMPING*particle.vy;
         }
     }
 }
