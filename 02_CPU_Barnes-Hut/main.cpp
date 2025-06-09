@@ -14,13 +14,13 @@
 #define MAGNIFICATION 1.0f
 #define MASS 10.0f
 #define CENTER_MASS 10000.0f
-#define SUBSTEPS 10
+#define SUBSTEPS 20
 
 
 // Numerical properties
 #define SUBSTEPS_DT 0.01f
-#define MAXIMUM_TREE_SIZE (2*PARTICLE_COUNT)
-#define THETA 0.5f
+#define MAXIMUM_TREE_SIZE (PARTICLE_COUNT)
+#define THETA 1.0f
 #define SOFTENING_EPSILON 0.01f 
 #define NORM2(x, y) ((x) * (x) + (y) * (y)) 
 
@@ -28,12 +28,14 @@
 // Physics properties
 #define G 0.10f
 #define RAD_MASS_CONSTANT 10.0f
-#define MAX_FORCE 1000.0f
+#define MAX_FORCE 10.0f
+#define MAX_ACCELERATION 10.0f
 
-#define DEBUG
-#define DEBUG2
-// #define DEBUG_INSERTION
-#define DEBUG_COM
+
+// #define DEBUG
+// #define DEBUG2
+// // #define DEBUG_INSERTION
+// #define DEBUG_COM
 
 int current_available_index = PARTICLE_COUNT;
 int tree_size = 0;
@@ -78,7 +80,7 @@ struct Node
 
 Particle *particles_main = new Particle[PARTICLE_COUNT];
 sf::CircleShape *pshape_main = new sf::CircleShape[PARTICLE_COUNT];
-
+Node *tree_array_main = new Node[MAXIMUM_TREE_SIZE];
 // Helper functions
 float randf(float lb = 0.0f, float ub = 1.0f)
 {
@@ -105,7 +107,7 @@ void init_particles(Particle *particles, sf::CircleShape *shapes, int count)
         // particle.y = randf(YMin*MAGNIFICATION, YMax*MAGNIFICATION);
         // Initialize velocity to be in stable circular motion. centripital == gravitational force
         float angle = randf(0.0f, 2.0f * 3.14159265358979323846f);
-        const float radius = MAGNIFICATION * randf(1.0f, 0.7f * (XMax - XMin) / 2.0f); // Use half the width as radius
+        const float radius = MAGNIFICATION * randf( 0.2f * (XMax - XMin) *0.5f, 0.7f * (XMax - XMin) *0.5f); // Use half the width as radius
         particle.x = MAGNIFICATION * ((XMax + XMin) / 2.0f + radius * cosf(angle));
         particle.y = MAGNIFICATION * ((YMax + YMin) / 2.0f + radius * sinf(angle));
         // particle.x = MAGNIFICATION * (XMax + XMin) / 2.0f + RAD * cosf(angle);
@@ -264,7 +266,7 @@ void insert_particle(const Particle *particles, Node *tree_array, const int pidx
 
     // int index = current_available_index++;
 }
-void construct_trees(const Particle *particles, Node *tree_array, const int pcount, float *bounds)
+Node* construct_trees(const Particle *particles, Node *tree_array, const int pcount, float *bounds)
 {
     print("Deleting old tree array...");
     delete[] tree_array;
@@ -287,43 +289,32 @@ void construct_trees(const Particle *particles, Node *tree_array, const int pcou
         insert_particle(particles, tree_array, i, 0);
     }
     tree_size = current_available_index;
-    print("Particles inserted successfully. Current available index: " + std::to_string(current_available_index));
-    current_available_index; // Decrement to get the last valid index
-    print("testing tree_array[0].valid: " + std::to_string(tree_array[current_available_index-1].valid));
-
-    print("Resizing tree array to current available index...");
-    // Node *temp = new Node[current_available_index];
-    // if (temp == nullptr)
-    // {
-    //     print("Memory allocation failed for tree array resize.");
-    //     exit(1);
-    // }
-    // for (int i = 0; i < current_available_index; i++)
-    // {
-    //     temp[i] = tree_array[i];
-    // }
-    // print("Tree array resized successfully. New size: " + std::to_string(current_available_index));
-    // print("Deleting old tree array...");
-    // delete[] tree_array;
-    // print("Assigning new tree array to tree_array pointer...");
-    // tree_array = temp;
-
-    print("testing tree_array[0].valid: " + std::to_string(tree_array[current_available_index-1].valid));
-
+    print("Particles inserted successfully. Current available index: " + std::to_string(tree_size));
+    print("testing tree_array[0].valid: " + std::to_string(tree_array[tree_size-1].valid));
+    return tree_array;
 }
 
-void computer_tree_coms(const Particle *particles, Node *tree_array, const int pcount, const int ncount)
+void computer_tree_coms(Particle *particles, Node *tree_array, const int pcount, const int ncount)
 {
+    print(tree_array[0].valid ? "Root node is valid." : "Root node is not valid.");
+    print("Entering inner com function \n");
     for (int i = ncount - 1; i >= 0; i--)
     {
+
         #ifdef DEBUG_COM
         if(i>=tree_size)
         {
             print("Node index out of bounds: " + std::to_string(i) + ", tree size: " + std::to_string(tree_size));
             exit(1);
         }
+
         #endif
+        // print("Attempting com compute");
+        // print("Computing COM for node");
         Node &node = tree_array[i];
+
+        // print(node.valid ? "Node is valid." : "Node is not valid.");
+        // print("Able to access node");
 #ifdef DEBUG
         if (!node.valid)
         {
@@ -345,7 +336,7 @@ void computer_tree_coms(const Particle *particles, Node *tree_array, const int p
             { // It has a node
                 #ifdef DEBUG_COM
                 if (leaf - PARTICLE_COUNT >= ncount) print("Leaf index out of bounds: " + std::to_string(leaf - PARTICLE_COUNT));
-                print("Trying to compute COM for child node " + std::to_string(leaf - PARTICLE_COUNT) + " in parent node " + std::to_string(i));
+                // print("Trying to compute COM for child node " + std::to_string(leaf - PARTICLE_COUNT) + " in parent node " + std::to_string(i));
                 #endif
                 const Node &child_node = tree_array[leaf - PARTICLE_COUNT];
 #ifdef DEBUG
@@ -485,14 +476,16 @@ void perform_barnes_hut(Particle *particles, Node *tree_array, const int pcount,
     print("Performing Barnes-Hut algorithm...");
     get_bounding_box(particles, pcount, bounds);
     print("Constructing trees...");
-    construct_trees(particles, tree_array, pcount, bounds);
+    tree_array_main = construct_trees(particles, tree_array_main, pcount, bounds);
+    print("Tree checking...");
+    print(tree_array_main[0].valid ? "Root node is valid." : "Root node is not valid.");
     const int ncount = current_available_index;
     print("Trees constructed successfully. Number of nodes: " + std::to_string(ncount));
     print("Computing center of mass for nodes...");
-    computer_tree_coms(particles, tree_array, pcount, ncount);
+    computer_tree_coms(particles, tree_array_main, pcount, ncount);
     print("Center of mass computed successfully.");
     print("Calculating accelerations using Barnes-Hut algorithm...");
-    calculate_accelerations_barnes_hut(particles, tree_array, pcount, ncount, theta);
+    calculate_accelerations_barnes_hut(particles, tree_array_main, pcount, ncount, theta);
     print("Accelerations calculated successfully.");
 }
 
@@ -593,7 +586,7 @@ int main()
 {
     // Initialize random seed
     srand(42);
-    Node *tree_array = new Node[MAXIMUM_TREE_SIZE];
+    
     init_particles(particles_main, pshape_main, PARTICLE_COUNT);
     print("Particles initialized successfully. Particle count: " + std::to_string(PARTICLE_COUNT));
     sf::RenderWindow window(sf::VideoMode(XMax - XMin, YMax - YMin), "Particle Simulation");
@@ -615,7 +608,7 @@ int main()
             // step_gravity(particles, PARTICLE_COUNT);
             // compute_forces_naive(particles_main, PARTICLE_COUNT);
             print("Performing Barnes-Hut algorithm...");
-            perform_barnes_hut(particles_main, tree_array, PARTICLE_COUNT, THETA);
+            perform_barnes_hut(particles_main, tree_array_main, PARTICLE_COUNT, THETA);
             step_particles(particles_main, PARTICLE_COUNT);
 
         }
