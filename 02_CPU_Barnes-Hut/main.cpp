@@ -16,9 +16,15 @@
 #define CENTER_MASS 10000.0f
 #define SUBSTEPS 10
 
-#define SUBSTEPS_DT 0.01f
 
+// Numerical properties
+#define SUBSTEPS_DT 0.01f
 #define MAXIMUM_TREE_SIZE (5 * PARTICLE_COUNT)
+#define THETA 0.5f
+#define SOFTENING_EPSILON 0.01f 
+#define NORM2(x, y) ((x) * (x) + (y) * (y)) 
+
+
 // Physics properties
 #define G 0.10f
 #define RAD_MASS_CONSTANT 10.0f
@@ -349,7 +355,7 @@ void computer_tree_coms(const Particle *particles, Node *tree_array, const int p
 }
 
 // void compute_forces_at_point_by_node(const Node* tree_array, const int ncount, )
-void compute_forces_at_point_bh(const Node *tree_array, const Particle *particles, const int ncount, const int nidx, const float &x, const float &y, const float &theta, float &fx, float &fy)
+void compute_accelerations_at_point_bh(const Node *tree_array, const Particle *particles, const int ncount, const int nidx, const float &x, const float &y, const float &theta, float &ax, float &ay)
 {
     int index = 0;
     bool leaf = false;
@@ -362,19 +368,19 @@ void compute_forces_at_point_bh(const Node *tree_array, const Particle *particle
 #endif
     const float dx = tree_array[nidx].com_x - x;
     const float dy = tree_array[nidx].com_y - y;
-    const float dist_sq = dx * dx + dy * dy;
-    const float self_theta_sq = (tree_array[nidx].sideLength * tree_array[nidx].sideLength) / dist_sq;
+    const float inv_dist_sq = 1.0f/(NORM2(dx, dy)  + SOFTENING_EPSILON);
+    const float self_theta_sq = (tree_array[nidx].sideLength * tree_array[nidx].sideLength) *inv_dist_sq;
     if (self_theta_sq < theta * theta)
     {
         // If the node is far enough, treat it as a single particle
-        const float dist = sqrtf(dist_sq);
+        const float inv_dist = sqrtf(inv_dist_sq);
 #ifdef DEBUG2
-        if (dist < 1e-2f)
+        if (inv_dist > 1e2f)
             return;
 #endif
-        const float force = G * (tree_array[nidx].mass) / dist_sq;
-        fx += force * (dx / dist);
-        fy += force * (dy / dist);
+        const float acc = G * (tree_array[nidx].mass) * inv_dist_sq;
+        ax += acc * (dx * inv_dist);
+        ay += acc * (dy * inv_dist);
         return;
     }
     else
@@ -382,11 +388,20 @@ void compute_forces_at_point_bh(const Node *tree_array, const Particle *particle
         for (int i = 0; i < 4; i++)
         {
             int child_index = tree_array[nidx].leaves[i];
+       
+            
             if (child_index == -1)
                 continue;
             if (child_index >= PARTICLE_COUNT)
             {
-                compute_forces_at_point_bh(tree_array, particles, ncount, child_index - PARTICLE_COUNT, x, y, theta, fx, fy);
+                #ifdef DEBUG
+                if(child_index - PARTICLE_COUNT >= ncount)
+                {
+                    print("Child index out of bounds: " + std::to_string(child_index - PARTICLE_COUNT));
+                    exit(1);
+                }
+                #endif
+                compute_accelerations_at_point_bh(tree_array, particles, ncount, child_index - PARTICLE_COUNT, x, y, theta, ax, ay);
             }
             else if (child_index >= 0)
             {
@@ -394,34 +409,34 @@ void compute_forces_at_point_bh(const Node *tree_array, const Particle *particle
                 const Particle &particle = particles[child_index];
                 const float dx_p = particle.x - x;
                 const float dy_p = particle.y - y;
-                const float dist_sq_p = dx_p * dx_p + dy_p * dy_p;
+                const float dist_sq_p = NORM2(dx_p, dy_p)+ SOFTENING_EPSILON;
                 if (dist_sq_p < 1e-2f)
                     continue; // Avoid division by zero
-                const float dist_p = sqrtf(dist_sq_p);
-                const float force_p = G * (particle.mass) / dist_sq_p;
-                fx += force_p * (dx_p / dist_p);
-                fy += force_p * (dy_p / dist_p);
-            }
+                const float inv_dist_p = 1.0f/sqrtf(dist_sq_p);
+                const float acc_p = G * (particle.mass) / dist_sq_p;
+                ax += acc_p * (dx_p * inv_dist_p);
+                ay += acc_p * (dy_p * inv_dist_p);
+            } 
             else
             {
-                print("Unknown case in compute_forces_at_point_bh, child index: " + std::to_string(child_index));
+                print("Unknown case in compute_accelerations_at_point_bh, child index: " + std::to_string(child_index));
                 exit(1);
             }
         }
     }
 }
-void calculate_forces_barnes_hut(Particle *particles, const Node *tree_array, const int pcount, const int ncount, const float theta)
+void calculate_accelerations_barnes_hut(Particle *particles, const Node *tree_array, const int pcount, const int ncount, const float theta)
 {
     for (int i = 0; i < pcount; i++)
     {
         Particle &target = particles[i];
         const float x = target.x;
         const float y = target.y;
-        float fx = 0.0f;
-        float fy = 0.0f;
-        compute_forces_at_point_bh(tree_array, particles, ncount, 0, x, y, theta, fx, fy);
-        target.ax = fx / target.mass;
-        target.ay = fy / target.mass;
+        float ax = 0.0f;
+        float ay = 0.0f;
+        compute_accelerations_at_point_bh(tree_array, particles, ncount, 0, x, y, theta, ax, ay);
+        target.ax = ax;
+        target.ay = ay;
     }
 }
 
