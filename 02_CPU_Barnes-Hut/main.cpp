@@ -189,7 +189,7 @@ void get_bounding_box(const Particle *particles, int count, float *bounds)
     }
     bounds[0] = (minX + maxX) * 0.5f;
     bounds[1] = (minY + maxY) * 0.5f;
-    bounds[2] = ((maxX - minX) > (maxY - minY) ? (maxX - minX) : (maxY - minY)) * 0.5f; // Square grid
+    bounds[2] = ((maxX - minX) > (maxY - minY) ? (maxX - minX) : (maxY - minY)) ; // Square grid
 
     // bounds[0] = minX;
     // bounds[1] = minY;
@@ -440,6 +440,14 @@ void calculate_accelerations_barnes_hut(Particle *particles, const Node *tree_ar
     }
 }
 
+void perform_barnes_hut(Particle *particles, Node *tree_array, const int pcount, const float theta){
+    float bounds[3];
+    get_bounding_box(particles, pcount, bounds);
+    int ncount = construct_trees(particles, tree_array, pcount, bounds);
+    computer_tree_coms(particles, tree_array, pcount, ncount);
+    calculate_accelerations_barnes_hut(particles, tree_array, pcount, ncount, theta);
+}
+
 void step_particles(Particle *particles, int count)
 {
     // Update positions and velocities
@@ -454,6 +462,25 @@ void step_particles(Particle *particles, int count)
         particle.y += particle.vy * SUBSTEPS_DT * 0.5f;
         particle.ax = 0.0f;
         particle.ay = 0.0f;
+
+
+
+        if(particle.x < XMin*MAGNIFICATION) {
+            particle.x = XMin * MAGNIFICATION;
+            particle.vx = -particle.vx;
+        }
+        if(particle.x > XMax*MAGNIFICATION) {
+            particle.x = XMax * MAGNIFICATION;
+            particle.vx = -particle.vx;
+        }
+        if(particle.y < YMin*MAGNIFICATION) {
+            particle.y = YMin * MAGNIFICATION;
+            particle.vy = -particle.vy;
+        }
+        if(particle.y > YMax*MAGNIFICATION) {
+            particle.y = YMax * MAGNIFICATION;
+            particle.vy = -particle.vy;
+        }
     }
 }
 
@@ -519,6 +546,7 @@ int main()
     // Initialize random seed
     srand(42);
     init_particles(particles_main, pshape_main, PARTICLE_COUNT);
+    Node *tree_array = new Node[MAXIMUM_TREE_SIZE];
 
     sf::RenderWindow window(sf::VideoMode(XMax - XMin, YMax - YMin), "Particle Simulation");
     window.setFramerateLimit(60);
@@ -537,8 +565,10 @@ int main()
         {
             // Perform substeps
             // step_gravity(particles, PARTICLE_COUNT);
-            compute_forces_naive(particles_main, PARTICLE_COUNT);
+            // compute_forces_naive(particles_main, PARTICLE_COUNT);
+            perform_barnes_hut(particles_main, tree_array, PARTICLE_COUNT, THETA);
             step_particles(particles_main, PARTICLE_COUNT);
+
         }
         sync_shapes(particles_main, pshape_main, PARTICLE_COUNT);
 
