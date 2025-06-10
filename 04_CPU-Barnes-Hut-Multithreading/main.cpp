@@ -42,6 +42,9 @@
 #define MAX_VEL_IMPULSE 40.0f
 #define MAX_ACCELERATION 1000.0f
 
+#define COLLISION_HANDLING_PER_ITERATION 5
+
+
 #define TIMEIT(func, message)   \
     {                           \
         func;                      \
@@ -617,9 +620,24 @@ void calculate_accelerations_barnes_hut(Particle *particles, const Node *tree_ar
         target.ay = ay;
     }
 }
-
-void handle_collisions_particle(Particle *particles, const Node *tree_array, const int pcount, const int ncount, const int nidx, const int pidx){
-    Particle &particle = particles[pidx];
+void apply_particle_impulses(Particle *particles, const int pcount)
+{
+    // Apply impulses to particles
+    for (int i = 0; i < pcount; i++)
+    {
+        Particle &particle = particles[i];
+        particle.x += particle.dx;
+        particle.y += particle.dy;
+        particle.vx += particle.dvx;
+        particle.vy += particle.dvy;
+        particle.dx = 0.0f;
+        particle.dy = 0.0f;
+        particle.dvx = 0.0f;
+        particle.dvy = 0.0f;
+    }
+}
+void handle_collision_particle(Particle *particles, const Node *tree_array, const int pcount, const int ncount, const int pidx, const int nidx){
+Particle &particle = particles[pidx];
     const Node &node = tree_array[nidx];
     const bool left = (particle.x - particle.rad*COLLISION_RADIUS_MULTIPLER)< node.centerX;
     const bool top = (particle.y - particle.rad*COLLISION_RADIUS_MULTIPLER)< node.centerY;
@@ -641,7 +659,7 @@ void handle_collisions_particle(Particle *particles, const Node *tree_array, con
             continue;
         if(leaf >= PARTICLE_COUNT){
          //Node
-         handle_collisions_particle(particles, tree_array, pcount, ncount, leaf - PARTICLE_COUNT, pidx);
+         handle_collision_particle(particles, tree_array, pcount, ncount, pidx, leaf - PARTICLE_COUNT );
          continue;
         }
         if(leaf>=0){
@@ -686,6 +704,32 @@ void handle_collisions_particle(Particle *particles, const Node *tree_array, con
 
     
 }
+void handle_collisions(Particle *particles, const Node *tree_array, const int pcount, const int ncount, const int iterations)
+{
+    for(int iter=0; iter<iterations; iter++)
+    {
+      
+//     for (int i = 0; i < pcount; i++)
+//     {
+//         Particle &particle = particles[i];
+//         const double x = particle.x;
+//         const double y = particle.y;
+//         const double rad = particle.rad * COLLISION_RADIUS_MULTIPLER;
+//         const double rad_sq = rad * rad;
+// #ifdef DEBUG
+//         if (x < tree_array[0].centerX - tree_array[0].sideLength * 0.5f || x > tree_array[0].centerX + tree_array[0].sideLength * 0.5f ||
+//             y < tree_array[0].centerY - tree_array[0].sideLength * 0.5f || y > tree_array[0].centerY + tree_array[0].sideLength * 0.5f){
+//                 print("Not within root bounds. Shouldnt happen.");
+//                 exit(1);
+//             }
+//         #endif
+
+//         handle_collision_particle(particles, tree_array, pcount, ncount, i, 0);
+//     }
+    apply_particle_impulses(particles, pcount);
+
+}
+}
 
 
 void perform_barnes_hut(Particle *particles, Node *tree_array, const int pcount, const float theta)
@@ -705,6 +749,7 @@ void perform_barnes_hut(Particle *particles, Node *tree_array, const int pcount,
     print("Center of mass computed successfully.");
     print("Calculating accelerations using Barnes-Hut algorithm...");
     TIMEIT(calculate_accelerations_barnes_hut(particles, tree_array_main, pcount, ncount, theta), "Calculating accelerations");
+    TIMEIT(handle_collisions(particles, tree_array_main, pcount, ncount, COLLISION_HANDLING_PER_ITERATION), "Handling collisions");
     print("Accelerations calculated successfully.");
 }
 
@@ -714,14 +759,14 @@ void step_particles(Particle *particles, int count)
     for (int i = 0; i < count; i++)
     {
         Particle &particle = particles[i];
-        float mag_acc_sq = NORM2(particle.ax, particle.ay);
-        if (mag_acc_sq > MAX_ACCELERATION * MAX_ACCELERATION)
-        {
-            // Limit acceleration to MAX_ACCELERATION
-            float mag_acc_inv = 1 / sqrtf(mag_acc_sq);
-            particle.ax = (particle.ax * mag_acc_inv) * MAX_ACCELERATION;
-            particle.ay = (particle.ay * mag_acc_inv) * MAX_ACCELERATION;
-        }
+        // float mag_acc_sq = NORM2(particle.ax, particle.ay);
+        // if (mag_acc_sq > MAX_ACCELERATION * MAX_ACCELERATION)
+        // {
+        //     // Limit acceleration to MAX_ACCELERATION
+        //     float mag_acc_inv = 1 / sqrtf(mag_acc_sq);
+        //     particle.ax = (particle.ax * mag_acc_inv) * MAX_ACCELERATION;
+        //     particle.ay = (particle.ay * mag_acc_inv) * MAX_ACCELERATION;
+        // }
 
         particle.x += particle.vx * SUBSTEPS_DT * 0.5;
         particle.y += particle.vy * SUBSTEPS_DT * 0.5;
@@ -731,14 +776,7 @@ void step_particles(Particle *particles, int count)
         particle.y += particle.vy * SUBSTEPS_DT * 0.5;
         particle.ax = 0.0;
         particle.ay = 0.0;
-        particle.x += particle.dx;
-        particle.y += particle.dy;
-        particle.vx += particle.dvx;
-        particle.vy += particle.dvy;
-        particle.dx = 0.0f;
-        particle.dy = 0.0f;
-        particle.dvx = 0.0f;
-        particle.dvy = 0.0f;
+
 
         if (particle.x < XMin)
         {
