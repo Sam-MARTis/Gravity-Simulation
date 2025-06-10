@@ -9,10 +9,10 @@
 
 
 // Simulation properties
-#define PARTICLE_COUNT 5000
+#define PARTICLE_COUNT 10000
 #define CLOUD_VEL_MULTIPLIER 0.99f
-#define RAD 2.0f
-#define dRad 0.0f
+#define RAD 1.0f
+#define dRad 0.3f
 #define XMin 000.0f
 #define XMax 800.0f
 #define YMin 000.0f
@@ -22,16 +22,16 @@
 
 #define MAGNIFICATION 1.0f
 #define MASS 100.0f
-#define CENTER_MASS 500000.0f
+#define CENTER_MASS 5000000.0f
 #define CENTER_MASS_COUNT 2
 #define D_CENTER 10.0f
 #define DAMPING 0.4f
-#define SUBSTEPS 10
+#define SUBSTEPS 100
 
 #define INTERNAL_ELASTICITY 0.1 // Not used in this version, but can be used for future elasticity calculations
 
 // Numerical properties
-#define SUBSTEPS_DT 0.001
+#define SUBSTEPS_DT 0.0001
 #define MAXIMUM_TREE_SIZE (2 * PARTICLE_COUNT)
 #define THETA 1.5f
 #define SOFTENING_EPSILON 0.01f
@@ -40,9 +40,10 @@
 #define MAX_FORCE 10.0f
 #define MAX_VEL_IMPULSE 40.0f
 #define MAX_ACCELERATION 1000.0f
+
 #define TIMEIT(func, message)   \
     {                           \
-    Timer timer = Timer(message, rand());       \
+    Timer timer = Timer(message, 1);       \
     func;                      \
     }
 
@@ -124,6 +125,37 @@ struct Timer
         }
     }
 };
+
+/*
+Getting bounding box took: 0.011053ms
+Computing center of mass took: 0.100798ms
+Stepping particles took: 0.045684ms
+Constructing trees took: 0.501047ms
+Getting bounding box took: 0.009981ms
+Stepping particles took: 0.042204ms
+Getting bounding box took: 0.010204ms
+Computing center of mass took: 0.108893ms
+Constructing trees took: 0.502459ms
+Calculating accelerations took: 2.87496ms
+Stepping particles took: 0.045441ms
+Calculating accelerations took: 2.86933ms
+Calculating accelerations took: 2.8663ms
+Calculating accelerations took: 2.90329ms
+Stepping particles took: 0.045774ms
+Constructing trees took: 0.498962ms
+Computing center of mass took: 0.105516ms
+Computing center of mass took: 0.102982ms
+Constructing trees took: 0.461899ms
+Stepping particles took: 0.046573ms
+Getting bounding box took: 0.00996ms
+Constructing trees took: 0.464559ms
+Computing center of mass took: 0.107422ms
+Calculating accelerations took: 2.8717ms
+Getting bounding box took: 0.010902ms
+Stepping particles took: 0.046011ms
+Constructing trees took: 0.531166ms
+Computing center of mass took: 0.109073ms
+*/
 
 
 Particle *particles_main = new Particle[PARTICLE_COUNT];
@@ -363,6 +395,7 @@ void computer_tree_coms(Particle *particles, Node *tree_array, const int pcount,
 {
     print(tree_array[0].valid ? "Root node is valid." : "Root node is not valid.");
     print("Entering inner com function \n");
+    // #pragma omp parallel for
     for (int i = ncount - 1; i >= 0; i--)
     {
 
@@ -547,6 +580,7 @@ void compute_accelerations_at_particle_bh(const Node *tree_array, Particle *part
 }
 void calculate_accelerations_barnes_hut(Particle *particles, const Node *tree_array, const int pcount, const int ncount, const float theta)
 {
+    #pragma omp parallel for
     for (int i = 0; i < pcount; i++)
     {
         Particle &target = particles[i];
@@ -696,6 +730,7 @@ int main()
 {
     // Initialize random seed
     srand(42);
+    int frame_count = 0;
 
     init_particles(particles_main, pshape_main, PARTICLE_COUNT);
     print("Particles initialized successfully. Particle count: " + std::to_string(PARTICLE_COUNT));
@@ -727,7 +762,13 @@ int main()
         {
             window.draw(pshape_main[i]);
         }
-
+        sf::Texture texture;
+        texture.create(window.getSize().x, window.getSize().y);
+        texture.update(window);
+        sf::Image screenshot = texture.copyToImage();
+        std::string filename = "frames/frame_" + std::to_string(frame_count) + ".png";
+        screenshot.saveToFile(filename);
+        frame_count++;
         window.display();
     }
     return 0;
