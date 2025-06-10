@@ -4,9 +4,9 @@
 #include <SFML/Graphics.hpp>
 
 // Simulation properties
-#define PARTICLE_COUNT 1000
+#define PARTICLE_COUNT 5000
 #define CLOUD_VEL_MULTIPLIER 0.99f
-#define RAD 1.0f
+#define RAD 2.0f
 #define dRad 0.0f
 #define XMin 000.0f
 #define XMax 800.0f
@@ -17,31 +17,31 @@
 
 #define MAGNIFICATION 1.0f
 #define MASS 100.0f
-#define CENTER_MASS 1000.0f
+#define CENTER_MASS 500000.0f
 #define CENTER_MASS_COUNT 2
-#define D_CENTER 5.0f
+#define D_CENTER 10.0f
 #define DAMPING 0.4f
 #define SUBSTEPS 10
 
-#define INTERNAL_ELASTICITY 0.99 // Not used in this version, but can be used for future elasticity calculations
-
-
+#define INTERNAL_ELASTICITY 0.1 // Not used in this version, but can be used for future elasticity calculations
 
 // Numerical properties
-#define SUBSTEPS_DT 0.01
-#define MAXIMUM_TREE_SIZE (10*PARTICLE_COUNT)
-#define THETA 1.0f
-#define SOFTENING_EPSILON 0.01f 
-#define NORM2(x, y) ((x) * (x) + (y) * (y)) 
+#define SUBSTEPS_DT 0.001
+#define MAXIMUM_TREE_SIZE (2 * PARTICLE_COUNT)
+#define THETA 1.5f
+#define SOFTENING_EPSILON 0.01f
+#define NORM2(x, y) ((x) * (x) + (y) * (y))
 #define SQ(x) ((x) * (x))
+#define MAX_FORCE 10.0f
+#define MAX_VEL_IMPULSE 40.0f
+#define MAX_ACCELERATION 1000.0f
+
+
 
 
 // Physics properties
 #define G 0.10f
 #define RAD_MASS_CONSTANT 10.0f
-#define MAX_FORCE 10.0f
-#define MAX_ACCELERATION 1000.0f
-
 
 // #define DEBUG
 // #define DEBUG2
@@ -63,10 +63,10 @@ struct Particle
     double ay;
     float rad;
     float mass;
-    float dx;
-    float dy;
-    float dvx;
-    float dvy;
+    double dx;
+    double dy;
+    double dvx;
+    double dvy;
 };
 
 struct Node
@@ -105,7 +105,12 @@ void print(auto message)
 {
 #ifdef DEBUG
     std::cout << message << std::endl;
-    #endif
+#endif
+}
+
+void print2(auto message)
+{
+    std::cout << message << std::endl;
 }
 
 // Supplementary functions
@@ -122,17 +127,22 @@ void init_particles(Particle *particles, sf::CircleShape *shapes, int count)
         // particle.y = randf(YMin*MAGNIFICATION, YMax*MAGNIFICATION);
         // Initialize velocity to be in stable circular motion. centripital == gravitational force
         float angle = randf(0.0f, 2.0f * 3.14159265358979323846f);
-        const float radius = MAGNIFICATION * randf( INNER_RADII * (XMax - XMin) *0.5f, OUTER_RADII * (XMax - XMin) *0.5f); // Use half the width as radius
-        particle.x = MAGNIFICATION * ((XMax + XMin) / 2.0f + radius * cosf(angle));
-        particle.y = MAGNIFICATION * ((YMax + YMin) / 2.0f + radius * sinf(angle));
-        // particle.x = MAGNIFICATION * (XMax + XMin) / 2.0f + RAD * cosf(angle);
-        // particle.y = MAGNIFICATION * (YMax + YMin) / 2.0f + RAD * sinf(angle);
-        float speed = CLOUD_VEL_MULTIPLIER* sqrtf(G * CENTER_MASS * CENTER_MASS_COUNT / (radius)); // Speed for stable circular motion
-        particle.vx = speed * sinf(angle);
-        particle.vy = -speed * cosf(angle);
+        const float radius = randf(INNER_RADII * (XMax - XMin) * 0.5f, OUTER_RADII * (XMax - XMin) * 0.5f); // Use half the width as radius
+        particle.x = ((XMax + XMin) / 2.0f + radius * cosf(angle));
+        particle.y = ((YMax + YMin) / 2.0f + radius * sinf(angle));
+        // particle.x = (XMax + XMin) / 2.0f + RAD * cosf(angle);
+        // particle.y = (YMax + YMin) / 2.0f + RAD * sinf(angle);
+        float speed = CLOUD_VEL_MULTIPLIER * sqrtf(G * CENTER_MASS * CENTER_MASS_COUNT / (radius)); // Speed for stable circular motion
+        particle.vx = speed * sin(angle);
+        particle.vy = -speed * cos(angle);
 
-        particle.ax = 0.0f;
-        particle.ay = 0.0f;
+        particle.ax = 0.0;
+        particle.ay = 0.0;
+
+        particle.dx = 0.0;
+        particle.dy = 0.0;
+        particle.dvx = 0.0;
+        particle.dvy = 0.0;
         particle.rad = RAD + randf(-dRad, dRad);
 
         // particle.mass = RAD_MASS_CONSTANT * particle.rad * particle.rad;
@@ -142,22 +152,23 @@ void init_particles(Particle *particles, sf::CircleShape *shapes, int count)
         shape.setPosition(particle.x, particle.y);
         shape.setFillColor(sf::Color::White);
     }
-    particles[0].x = D_CENTER+ (MAGNIFICATION * (XMax + XMin) / 2.0f);
-    particles[0].y = (MAGNIFICATION * (YMax + YMin) / 2.0f);
-    particles[1].x = -D_CENTER + (MAGNIFICATION * (XMax + XMin) / 2.0f);
-    particles[1].y = (MAGNIFICATION * (YMax + YMin) / 2.0f);
-    particles[1].vy = sqrtf(G*CENTER_MASS/(4*D_CENTER));
+    particles[0].x = D_CENTER + ((XMax + XMin) / 2.0f);
+    particles[0].y = ((YMax + YMin) / 2.0f);
+    particles[1].x = -D_CENTER + ((XMax + XMin) / 2.0f);
+    particles[1].y = ((YMax + YMin) / 2.0f);
+    particles[1].vy = sqrtf(G * CENTER_MASS / (4 * D_CENTER));
     particles[0].vy = -particles[1].vy;
-    for(int i = 0; i< 2; i++){
-    particles[i].rad = 5 * RAD;
-    particles[i].mass = CENTER_MASS;
-    particles[i].vx = 0.0f;
-    particles[i].ax = 0.0f;
-    particles[i].ay = 0.0f;
-    shapes[i].setRadius(particles[i].rad);
-    shapes[i].setOrigin(particles[i].rad, particles[i].rad);
-    shapes[i].setPosition(particles[i].x, particles[i].y);
-    shapes[i].setFillColor(sf::Color::Red);
+    for (int i = 0; i < 2; i++)
+    {
+        particles[i].rad = 5 * RAD;
+        particles[i].mass = CENTER_MASS;
+        particles[i].vx = 0.0f;
+        particles[i].ax = 0.0f;
+        particles[i].ay = 0.0f;
+        shapes[i].setRadius(particles[i].rad);
+        shapes[i].setOrigin(particles[i].rad, particles[i].rad);
+        shapes[i].setPosition(particles[i].x, particles[i].y);
+        shapes[i].setFillColor(sf::Color::Red);
     }
 
     std::cout << "Particles initialized." << std::endl;
@@ -217,7 +228,7 @@ void get_bounding_box(const Particle *particles, int count, float *bounds)
     }
     bounds[0] = (minX + maxX) * 0.5f;
     bounds[1] = (minY + maxY) * 0.5f;
-    bounds[2] = ((maxX - minX) > (maxY - minY) ? (maxX - minX) : (maxY - minY)) ; // Square grid
+    bounds[2] = ((maxX - minX) > (maxY - minY) ? (maxX - minX) : (maxY - minY)); // Square grid
 
     // bounds[0] = minX;
     // bounds[1] = minY;
@@ -236,25 +247,25 @@ void insert_particle(const Particle *particles, Node *tree_array, const int pidx
 #endif
     // Particle particle = particles[pidx];
     int insert_index = (particles[pidx].x > node.centerX) + 2 * (particles[pidx].y > node.centerY);
-    #ifdef DEBUG_INSERTION
+#ifdef DEBUG_INSERTION
     print("particle " + std::to_string(pidx) + " -> node " + std::to_string(nidx) + " || index " + std::to_string(insert_index) + ", center: (" + std::to_string(node.centerX) + ", " + std::to_string(node.centerY) + "), side length: " + std::to_string(node.sideLength));
-    #endif
+#endif
     if (node.leaves[insert_index] == -1)
     {
-        #ifdef DEBUG_INSERTION
+#ifdef DEBUG_INSERTION
         print("Node empty, inserting particle " + std::to_string(pidx) + " -> node " + std::to_string(nidx) + " at index " + std::to_string(insert_index));
         // exit(1);
         print("Particle " + std::to_string(pidx) + " inserted successfully at index " + std::to_string(insert_index));
         print("");
-        #endif
+#endif
         node.leaves[insert_index] = pidx;
         return;
     }
     else if (node.leaves[insert_index] >= PARTICLE_COUNT) // It has a node. Go to the node pointed to
     {
-        #ifdef DEBUG_INSERTION
+#ifdef DEBUG_INSERTION
         print("Node is not empty, inserting particle " + std::to_string(pidx) + " into child node " + std::to_string(node.leaves[insert_index] - PARTICLE_COUNT));
-        #endif
+#endif
         insert_particle(particles, tree_array, pidx, node.leaves[insert_index] - PARTICLE_COUNT);
         return;
     }
@@ -286,7 +297,7 @@ void insert_particle(const Particle *particles, Node *tree_array, const int pidx
 
     // int index = current_available_index++;
 }
-Node* construct_trees(const Particle *particles, Node *tree_array, const int pcount, float *bounds)
+Node *construct_trees(const Particle *particles, Node *tree_array, const int pcount, float *bounds)
 {
     print("Deleting old tree array...");
     delete[] tree_array;
@@ -301,7 +312,7 @@ Node* construct_trees(const Particle *particles, Node *tree_array, const int pco
     tree_array[0].leaves[1] = -1;
     tree_array[0].leaves[2] = -1;
     tree_array[0].leaves[3] = -1;
-    
+
     current_available_index = 1;
     print("Inserting particles into tree...");
     for (int i = 0; i < pcount; i++)
@@ -310,7 +321,7 @@ Node* construct_trees(const Particle *particles, Node *tree_array, const int pco
     }
     tree_size = current_available_index;
     print("Particles inserted successfully. Current available index: " + std::to_string(tree_size));
-    print("testing tree_array[0].valid: " + std::to_string(tree_array[tree_size-1].valid));
+    print("testing tree_array[0].valid: " + std::to_string(tree_array[tree_size - 1].valid));
     return tree_array;
 }
 
@@ -321,14 +332,14 @@ void computer_tree_coms(Particle *particles, Node *tree_array, const int pcount,
     for (int i = ncount - 1; i >= 0; i--)
     {
 
-        #ifdef DEBUG_COM
-        if(i>=tree_size)
+#ifdef DEBUG_COM
+        if (i >= tree_size)
         {
             print("Node index out of bounds: " + std::to_string(i) + ", tree size: " + std::to_string(tree_size));
             exit(1);
         }
 
-        #endif
+#endif
         // print("Attempting com compute");
         // print("Computing COM for node");
         Node &node = tree_array[i];
@@ -354,10 +365,11 @@ void computer_tree_coms(Particle *particles, Node *tree_array, const int pcount,
                 continue;
             if (leaf >= PARTICLE_COUNT)
             { // It has a node
-                #ifdef DEBUG_COM
-                if (leaf - PARTICLE_COUNT >= ncount) print("Leaf index out of bounds: " + std::to_string(leaf - PARTICLE_COUNT));
-                // print("Trying to compute COM for child node " + std::to_string(leaf - PARTICLE_COUNT) + " in parent node " + std::to_string(i));
-                #endif
+#ifdef DEBUG_COM
+                if (leaf - PARTICLE_COUNT >= ncount)
+                    print("Leaf index out of bounds: " + std::to_string(leaf - PARTICLE_COUNT));
+// print("Trying to compute COM for child node " + std::to_string(leaf - PARTICLE_COUNT) + " in parent node " + std::to_string(i));
+#endif
                 const Node &child_node = tree_array[leaf - PARTICLE_COUNT];
 #ifdef DEBUG
                 if (!child_node.valid)
@@ -405,13 +417,15 @@ void computer_tree_coms(Particle *particles, Node *tree_array, const int pcount,
 }
 
 // void compute_forces_at_point_by_node(const Node* tree_array, const int ncount, )
-void compute_accelerations_at_point_bh(const Node *tree_array, Particle *particles, const int ncount, const int nidx, const float &x, const float &y, const float &theta, double &ax, double &ay)
+void compute_accelerations_at_particle_bh(const Node *tree_array, Particle *particles, const int ncount, const int nidx, const int& pidx, const float &theta, double &ax, double &ay)
 {
     int index = 0;
     bool leaf = false;
-    Particle &particle_original = particles[nidx];
-    
-    #ifdef DEBUG
+    Particle &particle_original = particles[pidx];
+    const double x = particle_original.x;
+    const double y = particle_original.y;
+
+#ifdef DEBUG
     if (!tree_array[nidx].valid)
     {
         print("Node is not valid, cannot compute forces.");
@@ -421,8 +435,8 @@ void compute_accelerations_at_point_bh(const Node *tree_array, Particle *particl
 #endif
     const double dx = tree_array[nidx].com_x - x;
     const double dy = tree_array[nidx].com_y - y;
-    const double inv_dist_sq = 1.0f/(NORM2(dx, dy)  + SOFTENING_EPSILON);
-    const float self_theta_sq = (tree_array[nidx].sideLength * tree_array[nidx].sideLength) *inv_dist_sq;
+    const double inv_dist_sq = 1.0f / (NORM2(dx, dy) + SOFTENING_EPSILON);
+    const float self_theta_sq = (tree_array[nidx].sideLength * tree_array[nidx].sideLength) * inv_dist_sq;
     if (self_theta_sq < theta * theta)
     {
         // If the node is far enough, treat it as a single particle
@@ -441,57 +455,62 @@ void compute_accelerations_at_point_bh(const Node *tree_array, Particle *particl
         for (int i = 0; i < 4; i++)
         {
             int child_index = tree_array[nidx].leaves[i];
-       
-            
+
             if (child_index == -1)
                 continue;
             if (child_index >= PARTICLE_COUNT)
             {
-                #ifdef DEBUG
-                if(child_index - PARTICLE_COUNT >= ncount)
+#ifdef DEBUG
+                if (child_index - PARTICLE_COUNT >= ncount)
                 {
                     print("Child index out of bounds: " + std::to_string(child_index - PARTICLE_COUNT));
                     exit(1);
                 }
-                #endif
-                compute_accelerations_at_point_bh(tree_array, particles, ncount, child_index - PARTICLE_COUNT, x, y, theta, ax, ay);
+#endif
+                compute_accelerations_at_particle_bh(tree_array, particles, ncount, child_index - PARTICLE_COUNT, pidx,  theta, ax, ay);
             }
             else if (child_index >= 0)
             {
                 // It's a particle
-                const Particle &particle_other = particles[child_index];
+                Particle &particle_other = particles[child_index];
                 const double dx_p = particle_other.x - x;
                 const double dy_p = particle_other.y - y;
-                const double dist_sq_p = NORM2(dx_p, dy_p)+ SOFTENING_EPSILON;
+                const double dist_sq_p = NORM2(dx_p, dy_p) + SOFTENING_EPSILON;
 
                 // if (dist_sq_p < 1e-2f)
                 //     continue; // Avoid division by zero
-                if(dist_sq_p < SQ(particle_other.rad + particle_original.rad)){
-                    // Handle collision
-                    const float relavtive_distance = sqrtf(dist_sq_p);
-                    const double dR = (particle_other.rad + particle_original.rad) - relavtive_distance;
+                const double inv_dist_p = 1.0f / sqrtf(dist_sq_p);      
+                if ((dist_sq_p - SOFTENING_EPSILON) < SQ(particle_other.rad + particle_original.rad))
+                {
+                    // // Handle collision
+                    // const float relavtive_distance_inv = sqrtf(dist_sq_p);
+                    const double dR = (particle_other.rad + particle_original.rad) - 1/inv_dist_p;
                     const double mass_ratio = particle_other.mass / (particle_other.mass + particle_original.mass);
                     const double relative_vx = particle_other.vx - particle_original.vx;
                     const double relative_vy = particle_other.vy - particle_original.vy;
-                    
-                    particle_original.dx -= (dx_p / relavtive_distance) * dR * mass_ratio;
-                    particle_original.dy -= (dy_p / relavtive_distance) * dR * mass_ratio;
-                    particle_original.dvx += relative_vx * mass_ratio*(1+ INTERNAL_ELASTICITY);
-                    particle_original.dvy += relative_vy * mass_ratio*(1+ INTERNAL_ELASTICITY);
-                }else{
-                const double inv_dist_p = 1.0f/sqrtf(dist_sq_p);
+                    const double dV = ((relative_vx * dx_p + relative_vy * dy_p) * inv_dist_p) * (1 + INTERNAL_ELASTICITY) * (mass_ratio);
+
+                        particle_original.dx -= (dx_p *inv_dist_p) * dR * mass_ratio;
+                        particle_original.dy -= (dy_p *inv_dist_p) * dR * mass_ratio;
+
+                        particle_original.dvx += (dx_p *inv_dist_p) * dV;
+                        particle_original.dvy += (dy_p *inv_dist_p) * dV;  
+                
+            }
+            else
+            {
                 const double acc_p = G * (particle_other.mass) * SQ(inv_dist_p);
                 ax += acc_p * (dx_p * inv_dist_p);
                 ay += acc_p * (dy_p * inv_dist_p);
-                }
-            } 
-            else
-            {
-                print("Unknown case in compute_accelerations_at_point_bh, child index: " + std::to_string(child_index));
-                exit(1);
             }
         }
+        else
+        {
+            print("Unknown case in compute_accelerations_at_point_bh, child index: " + std::to_string(child_index));
+            exit(1);
+        }
     }
+}
 }
 void calculate_accelerations_barnes_hut(Particle *particles, const Node *tree_array, const int pcount, const int ncount, const float theta)
 {
@@ -502,13 +521,14 @@ void calculate_accelerations_barnes_hut(Particle *particles, const Node *tree_ar
         const double y = target.y;
         double ax = 0.0;
         double ay = 0.0;
-        compute_accelerations_at_point_bh(tree_array, particles, ncount, 0, x, y, theta, ax, ay);
+        compute_accelerations_at_particle_bh(tree_array, particles, ncount, 0, i, theta, ax, ay);
         target.ax = ax;
         target.ay = ay;
     }
 }
 
-void perform_barnes_hut(Particle *particles, Node *tree_array, const int pcount, const float theta){
+void perform_barnes_hut(Particle *particles, Node *tree_array, const int pcount, const float theta)
+{
     float bounds[3];
     print("Performing Barnes-Hut algorithm...");
     get_bounding_box(particles, pcount, bounds);
@@ -533,13 +553,13 @@ void step_particles(Particle *particles, int count)
     {
         Particle &particle = particles[i];
         float mag_acc_sq = NORM2(particle.ax, particle.ay);
-        if (mag_acc_sq > MAX_ACCELERATION * MAX_ACCELERATION){
+        if (mag_acc_sq > MAX_ACCELERATION * MAX_ACCELERATION)
+        {
             // Limit acceleration to MAX_ACCELERATION
-            float mag_acc_inv = 1/sqrtf(mag_acc_sq);
+            float mag_acc_inv = 1 / sqrtf(mag_acc_sq);
             particle.ax = (particle.ax * mag_acc_inv) * MAX_ACCELERATION;
             particle.ay = (particle.ay * mag_acc_inv) * MAX_ACCELERATION;
         }
-
 
         particle.x += particle.vx * SUBSTEPS_DT * 0.5;
         particle.y += particle.vy * SUBSTEPS_DT * 0.5;
@@ -558,23 +578,25 @@ void step_particles(Particle *particles, int count)
         particle.dvx = 0.0f;
         particle.dvy = 0.0f;
 
-
-
-        if(particle.x < XMin*MAGNIFICATION) {
-            particle.x = XMin * MAGNIFICATION;
-            particle.vx = -DAMPING*particle.vx;
+        if (particle.x < XMin)
+        {
+            particle.x = XMin;
+            particle.vx = -DAMPING * particle.vx;
         }
-        if(particle.x > XMax*MAGNIFICATION) {
-            particle.x = XMax * MAGNIFICATION;
-            particle.vx = -DAMPING*particle.vx;
+        if (particle.x > XMax)
+        {
+            particle.x = XMax;
+            particle.vx = -DAMPING * particle.vx;
         }
-        if(particle.y < YMin*MAGNIFICATION) {
-            particle.y = YMin * MAGNIFICATION;
-            particle.vy = -DAMPING*particle.vy;
+        if (particle.y < YMin)
+        {
+            particle.y = YMin;
+            particle.vy = -DAMPING * particle.vy;
         }
-        if(particle.y > YMax*MAGNIFICATION) {
-            particle.y = YMax * MAGNIFICATION;
-            particle.vy = -DAMPING*particle.vy;
+        if (particle.y > YMax)
+        {
+            particle.y = YMax;
+            particle.vy = -DAMPING * particle.vy;
         }
     }
 }
@@ -632,7 +654,7 @@ void sync_shapes(Particle *particles, sf::CircleShape *shapes, int count)
     {
         Particle &particle = particles[i];
         sf::CircleShape &shape = shapes[i];
-        shape.setPosition(particle.x / MAGNIFICATION, particle.y / MAGNIFICATION);
+        shape.setPosition(particle.x, particle.y);
     }
 }
 
@@ -640,7 +662,7 @@ int main()
 {
     // Initialize random seed
     srand(42);
-    
+
     init_particles(particles_main, pshape_main, PARTICLE_COUNT);
     print("Particles initialized successfully. Particle count: " + std::to_string(PARTICLE_COUNT));
     sf::RenderWindow window(sf::VideoMode(XMax - XMin, YMax - YMin), "Particle Simulation");
@@ -664,7 +686,6 @@ int main()
             print("Performing Barnes-Hut algorithm...");
             perform_barnes_hut(particles_main, tree_array_main, PARTICLE_COUNT, THETA);
             step_particles(particles_main, PARTICLE_COUNT);
-
         }
         sync_shapes(particles_main, pshape_main, PARTICLE_COUNT);
 
