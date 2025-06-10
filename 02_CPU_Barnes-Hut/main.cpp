@@ -23,6 +23,8 @@
 #define DAMPING 0.4f
 #define SUBSTEPS 10
 
+#define INTERNAL_ELASTICITY 0.99 // Not used in this version, but can be used for future elasticity calculations
+
 
 
 // Numerical properties
@@ -31,6 +33,7 @@
 #define THETA 1.0f
 #define SOFTENING_EPSILON 0.01f 
 #define NORM2(x, y) ((x) * (x) + (y) * (y)) 
+#define SQ(x) ((x) * (x))
 
 
 // Physics properties
@@ -60,6 +63,10 @@ struct Particle
     double ay;
     float rad;
     float mass;
+    float dx;
+    float dy;
+    float dvx;
+    float dvy;
 };
 
 struct Node
@@ -398,11 +405,13 @@ void computer_tree_coms(Particle *particles, Node *tree_array, const int pcount,
 }
 
 // void compute_forces_at_point_by_node(const Node* tree_array, const int ncount, )
-void compute_accelerations_at_point_bh(const Node *tree_array, const Particle *particles, const int ncount, const int nidx, const float &x, const float &y, const float &theta, double &ax, double &ay)
+void compute_accelerations_at_point_bh(const Node *tree_array, Particle *particles, const int ncount, const int nidx, const float &x, const float &y, const float &theta, double &ax, double &ay)
 {
     int index = 0;
     bool leaf = false;
-#ifdef DEBUG
+    Particle &particle_original = particles[nidx];
+    
+    #ifdef DEBUG
     if (!tree_array[nidx].valid)
     {
         print("Node is not valid, cannot compute forces.");
@@ -450,16 +459,31 @@ void compute_accelerations_at_point_bh(const Node *tree_array, const Particle *p
             else if (child_index >= 0)
             {
                 // It's a particle
-                const Particle &particle = particles[child_index];
-                const double dx_p = particle.x - x;
-                const double dy_p = particle.y - y;
+                const Particle &particle_other = particles[child_index];
+                const double dx_p = particle_other.x - x;
+                const double dy_p = particle_other.y - y;
                 const double dist_sq_p = NORM2(dx_p, dy_p)+ SOFTENING_EPSILON;
-                if (dist_sq_p < 1e-2f)
-                    continue; // Avoid division by zero
+
+                // if (dist_sq_p < 1e-2f)
+                //     continue; // Avoid division by zero
+                if(dist_sq_p < SQ(particle_other.rad + particle_original.rad)){
+                    // Handle collision
+                    const float relavtive_distance = sqrtf(dist_sq_p);
+                    const double dR = (particle_other.rad + particle_original.rad) - relavtive_distance;
+                    const double mass_ratio = particle_other.mass / (particle_other.mass + particle_original.mass);
+                    const double relative_vx = particle_other.vx - particle_original.vx;
+                    const double relative_vy = particle_other.vy - particle_original.vy;
+                    
+                    particle_original.dx -= (dx_p / relavtive_distance) * dR * mass_ratio;
+                    particle_original.dy -= (dy_p / relavtive_distance) * dR * mass_ratio;
+                    particle_original.dvx += relative_vx * mass_ratio*(1+ INTERNAL_ELASTICITY);
+                    particle_original.dvy += relative_vy * mass_ratio*(1+ INTERNAL_ELASTICITY);
+                }else{
                 const double inv_dist_p = 1.0f/sqrtf(dist_sq_p);
-                const double acc_p = G * (particle.mass) / dist_sq_p;
+                const double acc_p = G * (particle_other.mass) * SQ(inv_dist_p);
                 ax += acc_p * (dx_p * inv_dist_p);
                 ay += acc_p * (dy_p * inv_dist_p);
+                }
             } 
             else
             {
@@ -525,6 +549,14 @@ void step_particles(Particle *particles, int count)
         particle.y += particle.vy * SUBSTEPS_DT * 0.5;
         particle.ax = 0.0;
         particle.ay = 0.0;
+        particle.x += particle.dx;
+        particle.y += particle.dy;
+        particle.vx += particle.dvx;
+        particle.vy += particle.dvy;
+        particle.dx = 0.0f;
+        particle.dy = 0.0f;
+        particle.dvx = 0.0f;
+        particle.dvy = 0.0f;
 
 
 
