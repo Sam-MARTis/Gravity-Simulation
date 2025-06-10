@@ -16,6 +16,17 @@ struct Particle{
     float rad;
     float mass;
 };
+struct Particle2{
+    float x;
+    float y;
+    float vx;
+    float vy;
+    double ax;
+    double ay;
+    float rad;
+    float mass;
+};
+
 
 struct Node{
     
@@ -40,6 +51,8 @@ int main(){
     // print(sizeof(n));
     // print(sizeof(Node));
     // print(sizeof(bool) + sizeof(int) * 4 + sizeof(float) * 3);
+    print(sizeof(Particle));
+    print(sizeof(Particle2));
 
     // print(*(int*)(&n.valid + 4*sizeof(bool)));
     // print(*&n.leaf1idx);

@@ -26,7 +26,7 @@
 
 
 // Numerical properties
-#define SUBSTEPS_DT 0.001f
+#define SUBSTEPS_DT 0.01
 #define MAXIMUM_TREE_SIZE (10*PARTICLE_COUNT)
 #define THETA 1.0f
 #define SOFTENING_EPSILON 0.01f 
@@ -52,12 +52,12 @@ int tree_size = 0;
 
 struct Particle
 {
-    float x;
-    float y;
-    float vx;
-    float vy;
-    float ax;
-    float ay;
+    double x;
+    double y;
+    double vx;
+    double vy;
+    double ax;
+    double ay;
     float rad;
     float mass;
 };
@@ -398,7 +398,7 @@ void computer_tree_coms(Particle *particles, Node *tree_array, const int pcount,
 }
 
 // void compute_forces_at_point_by_node(const Node* tree_array, const int ncount, )
-void compute_accelerations_at_point_bh(const Node *tree_array, const Particle *particles, const int ncount, const int nidx, const float &x, const float &y, const float &theta, float &ax, float &ay)
+void compute_accelerations_at_point_bh(const Node *tree_array, const Particle *particles, const int ncount, const int nidx, const float &x, const float &y, const float &theta, double &ax, double &ay)
 {
     int index = 0;
     bool leaf = false;
@@ -410,9 +410,9 @@ void compute_accelerations_at_point_bh(const Node *tree_array, const Particle *p
         // continue;
     }
 #endif
-    const float dx = tree_array[nidx].com_x - x;
-    const float dy = tree_array[nidx].com_y - y;
-    const float inv_dist_sq = 1.0f/(NORM2(dx, dy)  + SOFTENING_EPSILON);
+    const double dx = tree_array[nidx].com_x - x;
+    const double dy = tree_array[nidx].com_y - y;
+    const double inv_dist_sq = 1.0f/(NORM2(dx, dy)  + SOFTENING_EPSILON);
     const float self_theta_sq = (tree_array[nidx].sideLength * tree_array[nidx].sideLength) *inv_dist_sq;
     if (self_theta_sq < theta * theta)
     {
@@ -422,7 +422,7 @@ void compute_accelerations_at_point_bh(const Node *tree_array, const Particle *p
         if (inv_dist > 1e2f)
             return;
 #endif
-        const float acc = G * (tree_array[nidx].mass) * inv_dist_sq;
+        const double acc = G * (tree_array[nidx].mass) * inv_dist_sq;
         ax += acc * (dx * inv_dist);
         ay += acc * (dy * inv_dist);
         return;
@@ -451,13 +451,13 @@ void compute_accelerations_at_point_bh(const Node *tree_array, const Particle *p
             {
                 // It's a particle
                 const Particle &particle = particles[child_index];
-                const float dx_p = particle.x - x;
-                const float dy_p = particle.y - y;
-                const float dist_sq_p = NORM2(dx_p, dy_p)+ SOFTENING_EPSILON;
+                const double dx_p = particle.x - x;
+                const double dy_p = particle.y - y;
+                const double dist_sq_p = NORM2(dx_p, dy_p)+ SOFTENING_EPSILON;
                 if (dist_sq_p < 1e-2f)
                     continue; // Avoid division by zero
-                const float inv_dist_p = 1.0f/sqrtf(dist_sq_p);
-                const float acc_p = G * (particle.mass) / dist_sq_p;
+                const double inv_dist_p = 1.0f/sqrtf(dist_sq_p);
+                const double acc_p = G * (particle.mass) / dist_sq_p;
                 ax += acc_p * (dx_p * inv_dist_p);
                 ay += acc_p * (dy_p * inv_dist_p);
             } 
@@ -474,10 +474,10 @@ void calculate_accelerations_barnes_hut(Particle *particles, const Node *tree_ar
     for (int i = 0; i < pcount; i++)
     {
         Particle &target = particles[i];
-        const float x = target.x;
-        const float y = target.y;
-        float ax = 0.0f;
-        float ay = 0.0f;
+        const double x = target.x;
+        const double y = target.y;
+        double ax = 0.0;
+        double ay = 0.0;
         compute_accelerations_at_point_bh(tree_array, particles, ncount, 0, x, y, theta, ax, ay);
         target.ax = ax;
         target.ay = ay;
@@ -517,14 +517,14 @@ void step_particles(Particle *particles, int count)
         }
 
 
-        particle.x += particle.vx * SUBSTEPS_DT * 0.5f;
-        particle.y += particle.vy * SUBSTEPS_DT * 0.5f;
+        particle.x += particle.vx * SUBSTEPS_DT * 0.5;
+        particle.y += particle.vy * SUBSTEPS_DT * 0.5;
         particle.vx += particle.ax * SUBSTEPS_DT;
         particle.vy += particle.ay * SUBSTEPS_DT;
-        particle.x += particle.vx * SUBSTEPS_DT * 0.5f;
-        particle.y += particle.vy * SUBSTEPS_DT * 0.5f;
-        particle.ax = 0.0f;
-        particle.ay = 0.0f;
+        particle.x += particle.vx * SUBSTEPS_DT * 0.5;
+        particle.y += particle.vy * SUBSTEPS_DT * 0.5;
+        particle.ax = 0.0;
+        particle.ay = 0.0;
 
 
 
