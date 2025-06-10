@@ -10,29 +10,30 @@
 
 // Simulation properties
 #define PARTICLE_COUNT 10000
-#define CLOUD_VEL_MULTIPLIER 0.99f
+#define CLOUD_VEL_MULTIPLIER 1.05f
 #define RAD 1.0f
-#define dRad 0.3f
+#define dRad 0.5f
 #define XMin 000.0f
 #define XMax 800.0f
 #define YMin 000.0f
 #define YMax 800.0f
 #define INNER_RADII 0.2f
 #define OUTER_RADII 0.9f
+#define COLLISION_RADIUS_MULTIPLER 2.0f
 
 #define MAGNIFICATION 1.0f
 #define MASS 100.0f
-#define CENTER_MASS 5000000.0f
+#define CENTER_MASS 500000.0f
 #define CENTER_MASS_COUNT 2
-#define D_CENTER 10.0f
+#define D_CENTER 9.0f
 #define DAMPING 0.4f
-#define SUBSTEPS 100
+#define SUBSTEPS 25
 
 #define INTERNAL_ELASTICITY 0.1 // Not used in this version, but can be used for future elasticity calculations
 
 // Numerical properties
-#define SUBSTEPS_DT 0.0001
-#define MAXIMUM_TREE_SIZE (2 * PARTICLE_COUNT)
+#define SUBSTEPS_DT 0.001
+#define MAXIMUM_TREE_SIZE (10 * PARTICLE_COUNT)
 #define THETA 1.5f
 #define SOFTENING_EPSILON 0.01f
 #define NORM2(x, y) ((x) * (x) + (y) * (y))
@@ -43,14 +44,15 @@
 
 #define TIMEIT(func, message)   \
     {                           \
-    Timer timer = Timer(message, 1);       \
-    func;                      \
+        func;                      \
     }
-
+    
+    // Timer timer = Timer(message, 0);       \ 
 
 // Physics properties
 #define G 0.10f
 #define RAD_MASS_CONSTANT 10.0f
+#define RAD_LUMINOSITY 100.0f
 
 // #define DEBUG
 // #define DEBUG2
@@ -182,8 +184,11 @@ void print2(auto message)
 
 void init_particles(Particle *particles, sf::CircleShape *shapes, int count)
 {
-    const float centerX = (XMax + XMin) / 2.0f;
-    const float centerY = (YMax + YMin) / 2.0f;
+    const float center_x = (XMax + XMin) * 0.5f;
+    const float center_y = (YMax + YMin) * 0.5f;
+    const float span_x = (XMax - XMin) * 0.5f;
+    const float span_y = (YMax - YMin) * 0.5f;
+    const float span = (span_x > span_y ? span_x : span_y);
     for (int i = 0; i < count; i++)
     {
         Particle &particle = particles[i];
@@ -191,13 +196,24 @@ void init_particles(Particle *particles, sf::CircleShape *shapes, int count)
         // particle.x = randf(XMin*MAGNIFICATION, XMax*MAGNIFICATION);
         // particle.y = randf(YMin*MAGNIFICATION, YMax*MAGNIFICATION);
         // Initialize velocity to be in stable circular motion. centripital == gravitational force
-        float angle = randf(0.0f, 2.0f * 3.14159265358979323846f);
-        const float radius = randf(INNER_RADII * (XMax - XMin) * 0.5f, OUTER_RADII * (XMax - XMin) * 0.5f); // Use half the width as radius
-        particle.x = ((XMax + XMin) / 2.0f + radius * cosf(angle));
-        particle.y = ((YMax + YMin) / 2.0f + radius * sinf(angle));
+        // float angle = randf(0.0f, 2.0f * 3.14159265358979323846f);
+
+        
+        float x = center_x + randf(-OUTER_RADII*span_x, OUTER_RADII*span_x);
+        float y = center_y + randf(-OUTER_RADII*span_y, OUTER_RADII*span_y);
+        while((NORM2(x - center_x, y - center_y) < SQ(INNER_RADII*span)) || NORM2(x - center_x, y - center_y) > SQ(OUTER_RADII*span)){
+            x = center_x + randf(-OUTER_RADII*span_x, OUTER_RADII*span_x);
+            y = center_y + randf(-OUTER_RADII*span_y, OUTER_RADII*span_y);
+        }
+        // const float radius = randf(INNER_RADII * (XMax - XMin) * 0.5f, OUTER_RADII * (XMax - XMin) * 0.5f); // Use half the width as radius
+        particle.x = x;
+        particle.y = y;
+        // particle.x = ((XMax + XMin) / 2.0f + radius * cosf(angle));
+        // particle.y = ((YMax + YMin) / 2.0f + radius * sinf(angle));
         // particle.x = (XMax + XMin) / 2.0f + RAD * cosf(angle);
         // particle.y = (YMax + YMin) / 2.0f + RAD * sinf(angle);
-        float speed = CLOUD_VEL_MULTIPLIER * sqrtf(G * CENTER_MASS * CENTER_MASS_COUNT / (radius)); // Speed for stable circular motion
+        float angle = atan2f(y - center_y, x - center_x); // Angle from the center to the particle
+        float speed = CLOUD_VEL_MULTIPLIER * sqrtf(G * CENTER_MASS * CENTER_MASS_COUNT / sqrtf(NORM2(x-center_x, y-center_y))); // Speed for stable circular motion
         particle.vx = speed * sin(angle);
         particle.vy = -speed * cos(angle);
 
@@ -215,7 +231,11 @@ void init_particles(Particle *particles, sf::CircleShape *shapes, int count)
         shape.setRadius(particle.rad);
         shape.setOrigin(particle.rad, particle.rad);
         shape.setPosition(particle.x, particle.y);
+                #ifdef RAD_LUMINOSITY
+        shape.setFillColor(sf::Color(255, 255, 255, (int)round(SQ(particles[i].rad) *RAD_LUMINOSITY)));
+        #else
         shape.setFillColor(sf::Color::White);
+        #endif
     }
     particles[0].x = D_CENTER + ((XMax + XMin) / 2.0f);
     particles[0].y = ((YMax + YMin) / 2.0f);
@@ -233,7 +253,9 @@ void init_particles(Particle *particles, sf::CircleShape *shapes, int count)
         shapes[i].setRadius(particles[i].rad);
         shapes[i].setOrigin(particles[i].rad, particles[i].rad);
         shapes[i].setPosition(particles[i].x, particles[i].y);
+
         shapes[i].setFillColor(sf::Color::Red);
+        
     }
 
     std::cout << "Particles initialized." << std::endl;
@@ -547,32 +569,34 @@ void compute_accelerations_at_particle_bh(const Node *tree_array, Particle *part
                 // if (dist_sq_p < 1e-2f)
                 //     continue; // Avoid division by zero
                 const double inv_dist_p = 1.0f / sqrtf(dist_sq_p);
-                if ((dist_sq_p - SOFTENING_EPSILON) < SQ(particle_other.rad + particle_original.rad))
-                {
-                    // // Handle collision
-                    // const float relavtive_distance_inv = sqrtf(dist_sq_p);
-                    const double dR = (particle_other.rad + particle_original.rad) - 1 / inv_dist_p;
-                    const double mass_ratio = particle_other.mass / (particle_other.mass + particle_original.mass);
-                    const double relative_vx = particle_other.vx - particle_original.vx;
-                    const double relative_vy = particle_other.vy - particle_original.vy;
-                    const double dV = ((relative_vx * dx_p + relative_vy * dy_p) * inv_dist_p) * (1 + INTERNAL_ELASTICITY) * (mass_ratio);
+                // if ((dist_sq_p - SOFTENING_EPSILON) < SQ(particle_other.rad + particle_original.rad))
+                // {
+                //     // // Handle collision
+                //     // const float relavtive_distance_inv = sqrtf(dist_sq_p);
+                //     const double dR = (particle_other.rad + particle_original.rad) - 1 / inv_dist_p;
+                //     const double mass_ratio = particle_other.mass / (particle_other.mass + particle_original.mass);
+                //     const double relative_vx = particle_other.vx - particle_original.vx;
+                //     const double relative_vy = particle_other.vy - particle_original.vy;
+                //     const double dV = ((relative_vx * dx_p + relative_vy * dy_p) * inv_dist_p) * (1 + INTERNAL_ELASTICITY) * (mass_ratio);
 
-                    particle_original.dx -= (dx_p * inv_dist_p) * dR * mass_ratio;
-                    particle_original.dy -= (dy_p * inv_dist_p) * dR * mass_ratio;
+                //     particle_original.dx -= (dx_p * inv_dist_p) * dR * mass_ratio;
+                //     particle_original.dy -= (dy_p * inv_dist_p) * dR * mass_ratio;
 
-                    particle_original.dvx += (dx_p * inv_dist_p) * dV;
-                    particle_original.dvy += (dy_p * inv_dist_p) * dV;
-                }
-                else
-                {
+                //     particle_original.dvx += (dx_p * inv_dist_p) * dV;
+                //     particle_original.dvy += (dy_p * inv_dist_p) * dV;
+                // }
+                // else
+                // {
                     const double acc_p = G * (particle_other.mass) * SQ(inv_dist_p);
                     ax += acc_p * (dx_p * inv_dist_p);
                     ay += acc_p * (dy_p * inv_dist_p);
-                }
+                // }
             }
             else
             {
+                #ifdef DEBUG
                 print("Unknown case in compute_accelerations_at_point_bh, child index: " + std::to_string(child_index));
+                #endif
                 exit(1);
             }
         }
@@ -593,6 +617,76 @@ void calculate_accelerations_barnes_hut(Particle *particles, const Node *tree_ar
         target.ay = ay;
     }
 }
+
+void handle_collisions_particle(Particle *particles, const Node *tree_array, const int pcount, const int ncount, const int nidx, const int pidx){
+    Particle &particle = particles[pidx];
+    const Node &node = tree_array[nidx];
+    const bool left = (particle.x - particle.rad*COLLISION_RADIUS_MULTIPLER)< node.centerX;
+    const bool top = (particle.y - particle.rad*COLLISION_RADIUS_MULTIPLER)< node.centerY;
+    const bool right = (particle.x + particle.rad*COLLISION_RADIUS_MULTIPLER)> node.centerX;
+    const bool bottom = (particle.y + particle.rad*COLLISION_RADIUS_MULTIPLER)> node.centerY;
+    bool is_intersecting[4] = {left && top, right && top, left && bottom, right && bottom};
+    #ifdef DEBUG
+    if (!node.valid)
+    {
+        print("Node is not valid, cannot handle collisions.");
+        exit(1);
+    }
+    #endif
+    for(int i=0; i<4; i++){
+        const int &leaf = node.leaves[i];
+        if(leaf == -1)
+            continue;
+        if(!is_intersecting[i])
+            continue;
+        if(leaf >= PARTICLE_COUNT){
+         //Node
+         handle_collisions_particle(particles, tree_array, pcount, ncount, leaf - PARTICLE_COUNT, pidx);
+         continue;
+        }
+        if(leaf>=0){
+            // Particle
+            const Particle &other = particles[leaf];
+            const double dx = other.x - particle.x;
+            const double dy = other.y - particle.y;
+            const double dist_sq = NORM2(dx, dy);
+            if (dist_sq < SQ(particle.rad + other.rad))
+            {
+                // Handle collision
+                const double inv_dist = 1.0/sqrtf(dist_sq);
+                const double dR = (particle.rad + other.rad) - 1.0/inv_dist;
+                const double mass_ratio = other.mass / (other.mass + particle.mass);
+                const double relative_vx = other.vx - particle.vx;
+                const double relative_vy = other.vy - particle.vy;
+                const double dV = ((relative_vx * dx + relative_vy * dy) * inv_dist) * (1 + INTERNAL_ELASTICITY) * (mass_ratio);
+
+                particle.dx -= (dx * inv_dist) * dR * mass_ratio;
+                particle.dy -= (dy * inv_dist) * dR * mass_ratio;
+                particle.dvx += (dx * inv_dist) * dV;
+                particle.dvy += (dy * inv_dist) * dV;
+
+                /*
+                const double dR = (particle_other.rad + particle_original.rad) - 1 / inv_dist_p;
+                    const double mass_ratio = particle_other.mass / (particle_other.mass + particle_original.mass);
+                    const double relative_vx = particle_other.vx - particle_original.vx;
+                    const double relative_vy = particle_other.vy - particle_original.vy;
+                    const double dV = ((relative_vx * dx_p + relative_vy * dy_p) * inv_dist_p) * (1 + INTERNAL_ELASTICITY) * (mass_ratio);
+
+                    particle_original.dx -= (dx_p * inv_dist_p) * dR * mass_ratio;
+                    particle_original.dy -= (dy_p * inv_dist_p) * dR * mass_ratio;
+
+                    particle_original.dvx += (dx_p * inv_dist_p) * dV;
+                    particle_original.dvy += (dy_p * inv_dist_p) * dV;
+                */
+            }
+        }
+    }
+    
+
+
+    
+}
+
 
 void perform_barnes_hut(Particle *particles, Node *tree_array, const int pcount, const float theta)
 {
@@ -730,7 +824,7 @@ int main()
 {
     // Initialize random seed
     srand(42);
-    int frame_count = 0;
+    int frame_count = 10000;
 
     init_particles(particles_main, pshape_main, PARTICLE_COUNT);
     print("Particles initialized successfully. Particle count: " + std::to_string(PARTICLE_COUNT));
@@ -766,8 +860,8 @@ int main()
         texture.create(window.getSize().x, window.getSize().y);
         texture.update(window);
         sf::Image screenshot = texture.copyToImage();
-        std::string filename = "frames/frame_" + std::to_string(frame_count) + ".png";
-        screenshot.saveToFile(filename);
+        std::string filename = "frames/particles-"+std::to_string(PARTICLE_COUNT) + "_substeps-dt-"+std::to_string(SUBSTEPS_DT) + "_SUBSTEPS-"+std::to_string(SUBSTEPS)+"_theta-"+std::to_string(THETA) + "_frame-" + std::to_string(frame_count) + ".png";
+        // screenshot.saveToFile(filename);
         frame_count++;
         window.display();
     }
