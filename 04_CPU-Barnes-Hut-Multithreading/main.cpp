@@ -7,34 +7,33 @@
 
 // g++ main.cpp -o grav -lsfml-graphics -lsfml-window -lsfml-system -fopenmp
 
-
 // Simulation properties
-#define PARTICLE_COUNT 10000
-#define CLOUD_VEL_MULTIPLIER 1.05f
-#define RAD 1.0f
-#define dRad 0.5f
+#define PARTICLE_COUNT 5000
+#define CLOUD_VEL_MULTIPLIER 1.55f
+#define RAD 2.0f
+#define dRad 0.0f
 #define XMin 000.0f
 #define XMax 800.0f
 #define YMin 000.0f
 #define YMax 800.0f
 #define INNER_RADII 0.2f
 #define OUTER_RADII 0.9f
-#define COLLISION_RADIUS_MULTIPLER 2.0f
+#define COLLISION_RADIUS_MULTIPLER 1.1f
 
 #define MAGNIFICATION 1.0f
 #define MASS 100.0f
-#define CENTER_MASS 500000.0f
+#define CENTER_MASS 50000.0f
 #define CENTER_MASS_COUNT 2
 #define D_CENTER 9.0f
 #define DAMPING 0.4f
-#define SUBSTEPS 25
+#define SUBSTEPS 10
 
-#define INTERNAL_ELASTICITY 0.1 // Not used in this version, but can be used for future elasticity calculations
+#define INTERNAL_ELASTICITY 0.0
 
 // Numerical properties
-#define SUBSTEPS_DT 0.001
+#define SUBSTEPS_DT 0.1
 #define MAXIMUM_TREE_SIZE (10 * PARTICLE_COUNT)
-#define THETA 1.5f
+#define THETA 1.0f
 #define SOFTENING_EPSILON 0.01f
 #define NORM2(x, y) ((x) * (x) + (y) * (y))
 #define SQ(x) ((x) * (x))
@@ -42,15 +41,14 @@
 #define MAX_VEL_IMPULSE 40.0f
 #define MAX_ACCELERATION 1000.0f
 
-#define COLLISION_HANDLING_PER_ITERATION 5
+#define COLLISION_HANDLING_PER_ITERATION 10
 
-
-#define TIMEIT(func, message)   \
-    {                           \
-        func;                      \
+#define TIMEIT(func, message) \
+    {                         \
+        func;                 \
     }
-    
-    // Timer timer = Timer(message, 0);       \ 
+
+// Timer timer = Timer(message, 0);       \ 
 
 // Physics properties
 #define G 0.10f
@@ -114,19 +112,19 @@ struct Timer
     std::string name;
     int num;
 
-    Timer(std::string in, int ran=1)
+    Timer(std::string in, int ran = 1)
     {
         start = std::chrono::high_resolution_clock::now();
         name = in;
         num = ran;
-
     }
     ~Timer()
     {
         end = std::chrono::high_resolution_clock::now();
         duration = end - start;
-        if(num%10==0){
-        std::cout << name << " took: " << duration.count() * 1000.0f << "ms\n";
+        if (num % 10 == 0)
+        {
+            std::cout << name << " took: " << duration.count() * 1000.0f << "ms\n";
         }
     }
 };
@@ -161,7 +159,6 @@ Stepping particles took: 0.046011ms
 Constructing trees took: 0.531166ms
 Computing center of mass took: 0.109073ms
 */
-
 
 Particle *particles_main = new Particle[PARTICLE_COUNT];
 sf::CircleShape *pshape_main = new sf::CircleShape[PARTICLE_COUNT];
@@ -201,12 +198,12 @@ void init_particles(Particle *particles, sf::CircleShape *shapes, int count)
         // Initialize velocity to be in stable circular motion. centripital == gravitational force
         // float angle = randf(0.0f, 2.0f * 3.14159265358979323846f);
 
-        
-        float x = center_x + randf(-OUTER_RADII*span_x, OUTER_RADII*span_x);
-        float y = center_y + randf(-OUTER_RADII*span_y, OUTER_RADII*span_y);
-        while((NORM2(x - center_x, y - center_y) < SQ(INNER_RADII*span)) || NORM2(x - center_x, y - center_y) > SQ(OUTER_RADII*span)){
-            x = center_x + randf(-OUTER_RADII*span_x, OUTER_RADII*span_x);
-            y = center_y + randf(-OUTER_RADII*span_y, OUTER_RADII*span_y);
+        float x = center_x + randf(-OUTER_RADII * span_x, OUTER_RADII * span_x);
+        float y = center_y + randf(-OUTER_RADII * span_y, OUTER_RADII * span_y);
+        while ((NORM2(x - center_x, y - center_y) < SQ(INNER_RADII * span)) || NORM2(x - center_x, y - center_y) > SQ(OUTER_RADII * span))
+        {
+            x = center_x + randf(-OUTER_RADII * span_x, OUTER_RADII * span_x);
+            y = center_y + randf(-OUTER_RADII * span_y, OUTER_RADII * span_y);
         }
         // const float radius = randf(INNER_RADII * (XMax - XMin) * 0.5f, OUTER_RADII * (XMax - XMin) * 0.5f); // Use half the width as radius
         particle.x = x;
@@ -215,8 +212,8 @@ void init_particles(Particle *particles, sf::CircleShape *shapes, int count)
         // particle.y = ((YMax + YMin) / 2.0f + radius * sinf(angle));
         // particle.x = (XMax + XMin) / 2.0f + RAD * cosf(angle);
         // particle.y = (YMax + YMin) / 2.0f + RAD * sinf(angle);
-        float angle = atan2f(y - center_y, x - center_x); // Angle from the center to the particle
-        float speed = CLOUD_VEL_MULTIPLIER * sqrtf(G * CENTER_MASS * CENTER_MASS_COUNT / sqrtf(NORM2(x-center_x, y-center_y))); // Speed for stable circular motion
+        float angle = atan2f(y - center_y, x - center_x);                                                                           // Angle from the center to the particle
+        float speed = CLOUD_VEL_MULTIPLIER * sqrtf(G * CENTER_MASS * CENTER_MASS_COUNT / sqrtf(NORM2(x - center_x, y - center_y))); // Speed for stable circular motion
         particle.vx = speed * sin(angle);
         particle.vy = -speed * cos(angle);
 
@@ -234,11 +231,11 @@ void init_particles(Particle *particles, sf::CircleShape *shapes, int count)
         shape.setRadius(particle.rad);
         shape.setOrigin(particle.rad, particle.rad);
         shape.setPosition(particle.x, particle.y);
-                #ifdef RAD_LUMINOSITY
-        shape.setFillColor(sf::Color(255, 255, 255, (int)round(SQ(particles[i].rad) *RAD_LUMINOSITY)));
-        #else
+#ifdef RAD_LUMINOSITY
+        shape.setFillColor(sf::Color(255, 255, 255, (int)round(SQ(particles[i].rad) * RAD_LUMINOSITY)));
+#else
         shape.setFillColor(sf::Color::White);
-        #endif
+#endif
     }
     particles[0].x = D_CENTER + ((XMax + XMin) / 2.0f);
     particles[0].y = ((YMax + YMin) / 2.0f);
@@ -258,7 +255,6 @@ void init_particles(Particle *particles, sf::CircleShape *shapes, int count)
         shapes[i].setPosition(particles[i].x, particles[i].y);
 
         shapes[i].setFillColor(sf::Color::Red);
-        
     }
 
     std::cout << "Particles initialized." << std::endl;
@@ -590,16 +586,16 @@ void compute_accelerations_at_particle_bh(const Node *tree_array, Particle *part
                 // }
                 // else
                 // {
-                    const double acc_p = G * (particle_other.mass) * SQ(inv_dist_p);
-                    ax += acc_p * (dx_p * inv_dist_p);
-                    ay += acc_p * (dy_p * inv_dist_p);
+                const double acc_p = G * (particle_other.mass) * SQ(inv_dist_p);
+                ax += acc_p * (dx_p * inv_dist_p);
+                ay += acc_p * (dy_p * inv_dist_p);
                 // }
             }
             else
             {
-                #ifdef DEBUG
+#ifdef DEBUG
                 print("Unknown case in compute_accelerations_at_point_bh, child index: " + std::to_string(child_index));
-                #endif
+#endif
                 exit(1);
             }
         }
@@ -607,7 +603,7 @@ void compute_accelerations_at_particle_bh(const Node *tree_array, Particle *part
 }
 void calculate_accelerations_barnes_hut(Particle *particles, const Node *tree_array, const int pcount, const int ncount, const float theta)
 {
-    #pragma omp parallel for
+#pragma omp parallel for
     for (int i = 0; i < pcount; i++)
     {
         Particle &target = particles[i];
@@ -636,43 +632,57 @@ void apply_particle_impulses(Particle *particles, const int pcount)
         particle.dvy = 0.0f;
     }
 }
-void handle_collision_particle(Particle *particles, const Node *tree_array, const int pcount, const int ncount, const int pidx, const int nidx){
-Particle &particle = particles[pidx];
+void handle_collision_particle(Particle *particles, const Node *tree_array, const int pcount, const int ncount, const int pidx, const int nidx)
+{
+    Particle &particle = particles[pidx];
     const Node &node = tree_array[nidx];
-    const bool left = (particle.x - particle.rad*COLLISION_RADIUS_MULTIPLER)< node.centerX;
-    const bool top = (particle.y - particle.rad*COLLISION_RADIUS_MULTIPLER)< node.centerY;
-    const bool right = (particle.x + particle.rad*COLLISION_RADIUS_MULTIPLER)> node.centerX;
-    const bool bottom = (particle.y + particle.rad*COLLISION_RADIUS_MULTIPLER)> node.centerY;
+    // print2("A");
+    const bool left = (particle.x - particle.rad * COLLISION_RADIUS_MULTIPLER) < node.centerX;
+    const bool top = (particle.y - particle.rad * COLLISION_RADIUS_MULTIPLER) < node.centerY;
+    const bool right = (particle.x + particle.rad * COLLISION_RADIUS_MULTIPLER) > node.centerX;
+    const bool bottom = (particle.y + particle.rad * COLLISION_RADIUS_MULTIPLER) > node.centerY;
+    // print2("B");
     bool is_intersecting[4] = {left && top, right && top, left && bottom, right && bottom};
-    #ifdef DEBUG
+#ifdef DEBUG
     if (!node.valid)
     {
         print("Node is not valid, cannot handle collisions.");
         exit(1);
     }
-    #endif
-    for(int i=0; i<4; i++){
+#endif
+    for (int i = 0; i < 4; i++)
+    {
         const int &leaf = node.leaves[i];
-        if(leaf == -1)
+        if (leaf == -1)
             continue;
-        if(!is_intersecting[i])
+        if (!is_intersecting[i])
             continue;
-        if(leaf >= PARTICLE_COUNT){
-         //Node
-         handle_collision_particle(particles, tree_array, pcount, ncount, pidx, leaf - PARTICLE_COUNT );
-         continue;
+        if (leaf >= PARTICLE_COUNT)
+        {
+            // Node
+            if (leaf - PARTICLE_COUNT >= ncount)
+            {
+                print("Leaf index out of bounds: " + std::to_string(leaf - PARTICLE_COUNT));
+                exit(1);
+            }
+            handle_collision_particle(particles, tree_array, pcount, ncount, pidx, leaf - PARTICLE_COUNT);
+            continue;
         }
-        if(leaf>=0){
+        if (leaf >= 0)
+        {
             // Particle
+            // print2("C");
             const Particle &other = particles[leaf];
+            if (leaf == pidx)
+                continue;
             const double dx = other.x - particle.x;
             const double dy = other.y - particle.y;
             const double dist_sq = NORM2(dx, dy);
             if (dist_sq < SQ(particle.rad + other.rad))
             {
                 // Handle collision
-                const double inv_dist = 1.0/sqrtf(dist_sq);
-                const double dR = (particle.rad + other.rad) - 1.0/inv_dist;
+                const double inv_dist = 1.0 / sqrtf(dist_sq);
+                const double dR = (particle.rad + other.rad) - 1.0 / inv_dist;
                 const double mass_ratio = other.mass / (other.mass + particle.mass);
                 const double relative_vx = other.vx - particle.vx;
                 const double relative_vy = other.vy - particle.vy;
@@ -682,55 +692,54 @@ Particle &particle = particles[pidx];
                 particle.dy -= (dy * inv_dist) * dR * mass_ratio;
                 particle.dvx += (dx * inv_dist) * dV;
                 particle.dvy += (dy * inv_dist) * dV;
-
-                /*
-                const double dR = (particle_other.rad + particle_original.rad) - 1 / inv_dist_p;
-                    const double mass_ratio = particle_other.mass / (particle_other.mass + particle_original.mass);
-                    const double relative_vx = particle_other.vx - particle_original.vx;
-                    const double relative_vy = particle_other.vy - particle_original.vy;
-                    const double dV = ((relative_vx * dx_p + relative_vy * dy_p) * inv_dist_p) * (1 + INTERNAL_ELASTICITY) * (mass_ratio);
-
-                    particle_original.dx -= (dx_p * inv_dist_p) * dR * mass_ratio;
-                    particle_original.dy -= (dy_p * inv_dist_p) * dR * mass_ratio;
-
-                    particle_original.dvx += (dx_p * inv_dist_p) * dV;
-                    particle_original.dvy += (dy_p * inv_dist_p) * dV;
-                */
             }
         }
     }
-    
-
-
-    
 }
 void handle_collisions(Particle *particles, const Node *tree_array, const int pcount, const int ncount, const int iterations)
 {
-    for(int iter=0; iter<iterations; iter++)
-    {
-      
-//     for (int i = 0; i < pcount; i++)
-//     {
-//         Particle &particle = particles[i];
-//         const double x = particle.x;
-//         const double y = particle.y;
-//         const double rad = particle.rad * COLLISION_RADIUS_MULTIPLER;
-//         const double rad_sq = rad * rad;
-// #ifdef DEBUG
-//         if (x < tree_array[0].centerX - tree_array[0].sideLength * 0.5f || x > tree_array[0].centerX + tree_array[0].sideLength * 0.5f ||
-//             y < tree_array[0].centerY - tree_array[0].sideLength * 0.5f || y > tree_array[0].centerY + tree_array[0].sideLength * 0.5f){
-//                 print("Not within root bounds. Shouldnt happen.");
-//                 exit(1);
-//             }
-//         #endif
+#pragma omp parallel 
+{
 
-//         handle_collision_particle(particles, tree_array, pcount, ncount, i, 0);
-//     }
-    apply_particle_impulses(particles, pcount);
+        for (int iter = 0; iter < iterations; iter++){
+            #pragma omp for 
+                for (int i = 0; i < pcount; i++){
+                    Particle &particle = particles[i];
+                    const double x = particle.x;
+                    const double y = particle.y;
+                    const double rad = particle.rad * COLLISION_RADIUS_MULTIPLER;
+                    const double rad_sq = rad * rad;
+#ifdef DEBUG
+                    if (x < tree_array[0].centerX - tree_array[0].sideLength * 0.5f || x > tree_array[0].centerX + tree_array[0].sideLength * 0.5f ||
+                        y < tree_array[0].centerY - tree_array[0].sideLength * 0.5f || y > tree_array[0].centerY + tree_array[0].sideLength * 0.5f)
+                    {
+                        print("Not within root bounds. Shouldnt happen.");
+                        exit(1);
+                    }
+#endif
 
+                    handle_collision_particle(particles, tree_array, pcount, ncount, i, 0);
+                    }
+                
+            #pragma omp for 
+                for (int i = 0; i < pcount; i++)
+                {
+                    Particle &particle = particles[i];
+                    particle.x += particle.dx;
+                    particle.y += particle.dy;
+                    particle.vx += particle.dvx;
+                    particle.vy += particle.dvy;
+                    particle.dx = 0.0f;
+                    particle.dy = 0.0f;
+                    particle.dvx = 0.0f;
+                    particle.dvy = 0.0f;
+                
+                }
+            
+        
+            }
+        }
 }
-}
-
 
 void perform_barnes_hut(Particle *particles, Node *tree_array, const int pcount, const float theta)
 {
@@ -738,7 +747,7 @@ void perform_barnes_hut(Particle *particles, Node *tree_array, const int pcount,
     print("Performing Barnes-Hut algorithm...");
     TIMEIT(get_bounding_box(particles, pcount, bounds), "Getting bounding box");
     print("Constructing trees...");
-    
+
     TIMEIT(tree_array_main = construct_trees(particles, tree_array_main, pcount, bounds), "Constructing trees");
     print("Tree checking...");
     print(tree_array_main[0].valid ? "Root node is valid." : "Root node is not valid.");
@@ -759,14 +768,14 @@ void step_particles(Particle *particles, int count)
     for (int i = 0; i < count; i++)
     {
         Particle &particle = particles[i];
-        // float mag_acc_sq = NORM2(particle.ax, particle.ay);
-        // if (mag_acc_sq > MAX_ACCELERATION * MAX_ACCELERATION)
-        // {
-        //     // Limit acceleration to MAX_ACCELERATION
-        //     float mag_acc_inv = 1 / sqrtf(mag_acc_sq);
-        //     particle.ax = (particle.ax * mag_acc_inv) * MAX_ACCELERATION;
-        //     particle.ay = (particle.ay * mag_acc_inv) * MAX_ACCELERATION;
-        // }
+        float mag_acc_sq = NORM2(particle.ax, particle.ay);
+        if (mag_acc_sq > MAX_ACCELERATION * MAX_ACCELERATION)
+        {
+            // Limit acceleration to MAX_ACCELERATION
+            float mag_acc_inv = 1 / sqrtf(mag_acc_sq);
+            particle.ax = (particle.ax * mag_acc_inv) * MAX_ACCELERATION;
+            particle.ay = (particle.ay * mag_acc_inv) * MAX_ACCELERATION;
+        }
 
         particle.x += particle.vx * SUBSTEPS_DT * 0.5;
         particle.y += particle.vy * SUBSTEPS_DT * 0.5;
@@ -776,7 +785,6 @@ void step_particles(Particle *particles, int count)
         particle.y += particle.vy * SUBSTEPS_DT * 0.5;
         particle.ax = 0.0;
         particle.ay = 0.0;
-
 
         if (particle.x < XMin)
         {
@@ -898,7 +906,7 @@ int main()
         texture.create(window.getSize().x, window.getSize().y);
         texture.update(window);
         sf::Image screenshot = texture.copyToImage();
-        std::string filename = "frames/particles-"+std::to_string(PARTICLE_COUNT) + "_substeps-dt-"+std::to_string(SUBSTEPS_DT) + "_SUBSTEPS-"+std::to_string(SUBSTEPS)+"_theta-"+std::to_string(THETA) + "_frame-" + std::to_string(frame_count) + ".png";
+        std::string filename = "frames/particles-" + std::to_string(PARTICLE_COUNT) + "_substeps-dt-" + std::to_string(SUBSTEPS_DT) + "_SUBSTEPS-" + std::to_string(SUBSTEPS) + "_theta-" + std::to_string(THETA) + "_frame-" + std::to_string(frame_count) + ".png";
         // screenshot.saveToFile(filename);
         frame_count++;
         window.display();
