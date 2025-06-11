@@ -8,40 +8,42 @@
 // g++ main.cpp -o grav -lsfml-graphics -lsfml-window -lsfml-system -fopenmp
 
 // Simulation properties
-#define PARTICLE_COUNT 1000
+#define PARTICLE_COUNT 10000
 #define CLOUD_VEL_MULTIPLIER 1.0f
-#define RAD 2.0f
-#define dRad 0.0f
+#define RAD 0.1f
+#define dRad 0.05f
 #define XMin 000.0f
-#define XMax 800.0f
+#define XMax 900.0f
 #define YMin 000.0f
-#define YMax 800.0f
-#define INNER_RADII 0.2f
-#define OUTER_RADII 0.9f
+#define YMax 900.0f
+#define INNER_RADII 0.05f
+#define OUTER_RADII 0.7f
 #define COLLISION_RADIUS_MULTIPLER 2.0f
 
 #define MAGNIFICATION 1.0f
 #define MASS 100.0f
-#define CENTER_MASS 500000.0f
+#define CENTER_MASS 3000000.0f
+#define CENTER_RAD 2.0f
 #define CENTER_MASS_COUNT 2
-#define D_CENTER 15.0f
+#define D_CENTER 3.0f
 #define DAMPING 0.4f
-#define SUBSTEPS 10
+#define SUBSTEPS 5
 
 #define INTERNAL_ELASTICITY 1.0
 
 // Numerical properties
 #define SUBSTEPS_DT 0.001
-#define MAXIMUM_TREE_SIZE (10 * PARTICLE_COUNT)
-#define THETA 0.5f
+#define MAXIMUM_TREE_SIZE (5 * PARTICLE_COUNT)
+#define THETA 1.5f
 #define SOFTENING_EPSILON 0.01f
 #define NORM2(x, y) ((x) * (x) + (y) * (y))
 #define SQ(x) ((x) * (x))
 #define MAX_FORCE 10.0f
 #define MAX_VEL_IMPULSE 40.0f
-#define MAX_ACCELERATION 5000.0f
+#define MAX_ACCELERATION 5000000.0f
 
 #define COLLISION_HANDLING_PER_ITERATION 10
+#define MAX_COLLISION_SEPRATION_FRACTION 0.3
 
 #define TIMEIT(func, message) \
     {                         \
@@ -51,9 +53,9 @@
 // Timer timer = Timer(message, 0);       \ 
 
 // Physics properties
-#define G (100*0.10f)
+#define G (1.0f)
 #define RAD_MASS_CONSTANT 10.0f
-#define RAD_LUMINOSITY 100.0f
+#define RAD_LUMINOSITY 4050.0f
 
 // #define DEBUG
 // #define DEBUG2
@@ -603,7 +605,10 @@ void handle_collision_particle(Particle *particles, const Node *tree_array, cons
             {
                 // Handle collision
                 const double inv_dist = 1.0 / sqrtf(dist_sq);
-                const double dR = (particle.rad + other.rad) - 1.0 / inv_dist;
+                double dR = (particle.rad + other.rad) - 1.0 / inv_dist;
+                const double max_dr_allowed = MAX_COLLISION_SEPRATION_FRACTION * (particle.rad + other.rad);
+                dR = dR >max_dr_allowed? max_dr_allowed : dR; // Limit separation to a fraction of the radius
+
                 const double mass_ratio = other.mass / (other.mass + particle.mass);
                 // std::cout<<mass_ratio<<std::endl;
                 // const double relative_vx = other.vx - particle.vx;
@@ -623,11 +628,11 @@ void handle_collision_particle(Particle *particles, const Node *tree_array, cons
 }
 void handle_collisions(Particle *particles, const Node *tree_array, const int pcount, const int ncount, const int iterations)
 {
-// #pragma omp parallel 
+#pragma omp parallel 
 {
 
         for (int iter = 0; iter < iterations; iter++){
-            // #pragma omp for 
+            #pragma omp for 
                 for (int i = 0; i < pcount; i++){
                     Particle &particle = particles[i];
                     const double x = particle.x;
@@ -646,7 +651,7 @@ void handle_collisions(Particle *particles, const Node *tree_array, const int pc
                     handle_collision_particle(particles, tree_array, pcount, ncount, i, 0);
                     }
                 
-            // #pragma omp for 
+            #pragma omp for 
                 for (int i = 0; i < pcount; i++)
                 {
                     Particle &particle = particles[i];
@@ -812,7 +817,7 @@ void init_particles(Particle *particles, sf::CircleShape *shapes, int count)
 
         // particle.mass = RAD_MASS_CONSTANT * particle.rad * particle.rad;
         particle.mass = MASS;
-        shape.setRadius(particle.rad);
+        shape.setRadius(1.0);
         shape.setOrigin(particle.rad, particle.rad);
         shape.setPosition(particle.x, particle.y);
 #ifdef RAD_LUMINOSITY
@@ -836,7 +841,7 @@ void init_particles(Particle *particles, sf::CircleShape *shapes, int count)
     particles[0].x_prev = particles[0].x; // Previous position for Verlet integration
     for (int i = 0; i < 2; i++)
     {
-        particles[i].rad = 5 * RAD;
+        particles[i].rad = CENTER_RAD;
         particles[i].mass = CENTER_MASS;
         // particles[i].vx = 0.0f;
         // particles[i].x_prev = particles[i].x;
@@ -899,7 +904,7 @@ void init_velocities(Particle *particles, int count)
     particles[0].x_prev = particles[0].x; // Previous position for Verlet integration
     for (int i = 0; i < 2; i++)
     {
-        particles[i].rad = 5 * RAD;
+        particles[i].rad = CENTER_RAD;
         particles[i].mass = CENTER_MASS;
         // particles[i].vx = 0.0f;
         // particles[i].x_prev = particles[i].x;
