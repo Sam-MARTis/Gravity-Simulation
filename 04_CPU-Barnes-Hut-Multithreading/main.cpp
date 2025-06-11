@@ -9,7 +9,7 @@
 
 // Simulation properties
 #define PARTICLE_COUNT 5000
-#define CLOUD_VEL_MULTIPLIER 1.55f
+#define CLOUD_VEL_MULTIPLIER 1.0f
 #define RAD 2.0f
 #define dRad 0.0f
 #define XMin 000.0f
@@ -22,24 +22,24 @@
 
 #define MAGNIFICATION 1.0f
 #define MASS 100.0f
-#define CENTER_MASS 50000.0f
+#define CENTER_MASS MASS
 #define CENTER_MASS_COUNT 2
-#define D_CENTER 9.0f
+#define D_CENTER 15.0f
 #define DAMPING 0.4f
-#define SUBSTEPS 10
+#define SUBSTEPS 1
 
 #define INTERNAL_ELASTICITY 0.0
 
 // Numerical properties
-#define SUBSTEPS_DT 0.1
+#define SUBSTEPS_DT 0.005
 #define MAXIMUM_TREE_SIZE (10 * PARTICLE_COUNT)
-#define THETA 1.0f
+#define THETA 0.5f
 #define SOFTENING_EPSILON 0.01f
 #define NORM2(x, y) ((x) * (x) + (y) * (y))
 #define SQ(x) ((x) * (x))
 #define MAX_FORCE 10.0f
 #define MAX_VEL_IMPULSE 40.0f
-#define MAX_ACCELERATION 1000.0f
+#define MAX_ACCELERATION 5000.0f
 
 #define COLLISION_HANDLING_PER_ITERATION 10
 
@@ -69,16 +69,18 @@ struct Particle
 {
     double x;
     double y;
-    double vx;
-    double vy;
+    double x_prev;
+    double y_prev;
+    // double vx;
+    // double vy;
     double ax;
     double ay;
     float rad;
     float mass;
     double dx;
     double dy;
-    double dvx;
-    double dvy;
+    // double dvx;
+    // double dvy;
 };
 
 struct Node
@@ -214,16 +216,22 @@ void init_particles(Particle *particles, sf::CircleShape *shapes, int count)
         // particle.y = (YMax + YMin) / 2.0f + RAD * sinf(angle);
         float angle = atan2f(y - center_y, x - center_x);                                                                           // Angle from the center to the particle
         float speed = CLOUD_VEL_MULTIPLIER * sqrtf(G * CENTER_MASS * CENTER_MASS_COUNT / sqrtf(NORM2(x - center_x, y - center_y))); // Speed for stable circular motion
-        particle.vx = speed * sin(angle);
-        particle.vy = -speed * cos(angle);
+        
+        const double vx = speed * sin(angle);
+        const double vy = -speed * cos(angle);
+        particle.x_prev = particle.x - vx * SUBSTEPS_DT; // Previous position for Verlet integration
+        particle.y_prev = particle.y - vy * SUBSTEPS_DT;
+
+        // particle.x_prev = particle.x; // Previous position for Verlet integration
+        // particle.y_prev = particle.y;
 
         particle.ax = 0.0;
         particle.ay = 0.0;
 
         particle.dx = 0.0;
         particle.dy = 0.0;
-        particle.dvx = 0.0;
-        particle.dvy = 0.0;
+        // particle.dvx = 0.0;
+        // particle.dvy = 0.0;
         particle.rad = RAD + randf(-dRad, dRad);
 
         // particle.mass = RAD_MASS_CONSTANT * particle.rad * particle.rad;
@@ -241,13 +249,21 @@ void init_particles(Particle *particles, sf::CircleShape *shapes, int count)
     particles[0].y = ((YMax + YMin) / 2.0f);
     particles[1].x = -D_CENTER + ((XMax + XMin) / 2.0f);
     particles[1].y = ((YMax + YMin) / 2.0f);
-    particles[1].vy = sqrtf(G * CENTER_MASS / (4 * D_CENTER));
-    particles[0].vy = -particles[1].vy;
+    float vy = sqrtf(G * CENTER_MASS / (4* D_CENTER));
+    vy*= -1;
+    particles[1].y_prev = particles[1].y - vy * SUBSTEPS_DT; // Previous position for Verlet integration
+    particles[1].x_prev = particles[1].x; // Previous position for Verlet integration
+
+    // particles[0].vy = -particles[1].vy;
+    vy = -vy; // Reverse the velocity for the second particle
+    particles[0].y_prev = particles[0].y - vy * SUBSTEPS_DT; // Previous position for Verlet integration
+    particles[0].x_prev = particles[0].x; // Previous position for Verlet integration
     for (int i = 0; i < 2; i++)
     {
         particles[i].rad = 5 * RAD;
         particles[i].mass = CENTER_MASS;
-        particles[i].vx = 0.0f;
+        // particles[i].vx = 0.0f;
+        // particles[i].x_prev = particles[i].x;
         particles[i].ax = 0.0f;
         particles[i].ay = 0.0f;
         shapes[i].setRadius(particles[i].rad);
@@ -624,12 +640,12 @@ void apply_particle_impulses(Particle *particles, const int pcount)
         Particle &particle = particles[i];
         particle.x += particle.dx;
         particle.y += particle.dy;
-        particle.vx += particle.dvx;
-        particle.vy += particle.dvy;
+        // particle.vx += particle.dvx;
+        // particle.vy += particle.dvy;
         particle.dx = 0.0f;
         particle.dy = 0.0f;
-        particle.dvx = 0.0f;
-        particle.dvy = 0.0f;
+        // particle.dvx = 0.0f;
+        // particle.dvy = 0.0f;
     }
 }
 void handle_collision_particle(Particle *particles, const Node *tree_array, const int pcount, const int ncount, const int pidx, const int nidx)
@@ -672,7 +688,33 @@ void handle_collision_particle(Particle *particles, const Node *tree_array, cons
         {
             // Particle
             // print2("C");
-            const Particle &other = particles[leaf];
+
+            /*
+            void handle_collision(float *pos, const int &id1, const int &id2)
+                {
+                    const int p1 = (id1) * 2;
+                    const int p2 = (id2) * 2;
+                    const float dx = pos[p2] - pos[p1];
+                    const float dy = pos[p2 + 1] - pos[p1 + 1];
+                    const float distance_squared = dx*dx + dy*dy;
+                    if (distance_squared > RADIUS_SQUARED_TIMES_FOUR)
+                    {
+                        return;
+                    }
+                    const float distance = sqrtf(distance_squared);
+                    if (distance < 1e-6f)
+                        return;
+                    const float nx = dx / distance;
+                    const float ny = dy / distance;
+                    const float dR = RADIUS - 0.5f * distance;
+                    pos[p1] -= (nx * dR);
+                    pos[p1 + 1] -= (ny * dR);
+                    pos[p2] += (nx * dR);
+                    pos[p2 + 1] += (ny * dR);
+                }
+
+            */
+            Particle &other = particles[leaf];
             if (leaf == pidx)
                 continue;
             const double dx = other.x - particle.x;
@@ -684,25 +726,29 @@ void handle_collision_particle(Particle *particles, const Node *tree_array, cons
                 const double inv_dist = 1.0 / sqrtf(dist_sq);
                 const double dR = (particle.rad + other.rad) - 1.0 / inv_dist;
                 const double mass_ratio = other.mass / (other.mass + particle.mass);
-                const double relative_vx = other.vx - particle.vx;
-                const double relative_vy = other.vy - particle.vy;
-                const double dV = ((relative_vx * dx + relative_vy * dy) * inv_dist) * (1 + INTERNAL_ELASTICITY) * (mass_ratio);
-
-                particle.dx -= (dx * inv_dist) * dR * mass_ratio;
-                particle.dy -= (dy * inv_dist) * dR * mass_ratio;
-                particle.dvx += (dx * inv_dist) * dV;
-                particle.dvy += (dy * inv_dist) * dV;
+                std::cout<<mass_ratio<<std::endl;
+                // const double relative_vx = other.vx - particle.vx;
+                // const double relative_vy = other.vy - particle.vy;
+                // const double dV = ((relative_vx * dx + relative_vy * dy) * inv_dist) * (1 + INTERNAL_ELASTICITY) * (mass_ratio);
+                const double nx = dx * inv_dist;
+                const double ny = dy * inv_dist;
+                particle.x -= (nx) * dR * mass_ratio;
+                particle.y -= (ny) * dR * mass_ratio;
+                other.x += (nx) * dR * (1 - mass_ratio);
+                other.y += (ny) * dR * (1 - mass_ratio);
+                // particle.dvx += (dx * inv_dist) * dV;
+                // particle.dvy += (dy * inv_dist) * dV;
             }
         }
     }
 }
 void handle_collisions(Particle *particles, const Node *tree_array, const int pcount, const int ncount, const int iterations)
 {
-#pragma omp parallel 
+// #pragma omp parallel 
 {
 
         for (int iter = 0; iter < iterations; iter++){
-            #pragma omp for 
+            // #pragma omp for 
                 for (int i = 0; i < pcount; i++){
                     Particle &particle = particles[i];
                     const double x = particle.x;
@@ -721,18 +767,18 @@ void handle_collisions(Particle *particles, const Node *tree_array, const int pc
                     handle_collision_particle(particles, tree_array, pcount, ncount, i, 0);
                     }
                 
-            #pragma omp for 
+            // #pragma omp for 
                 for (int i = 0; i < pcount; i++)
                 {
                     Particle &particle = particles[i];
                     particle.x += particle.dx;
                     particle.y += particle.dy;
-                    particle.vx += particle.dvx;
-                    particle.vy += particle.dvy;
+                    // particle.vx += particle.dvx;
+                    // particle.vy += particle.dvy;
                     particle.dx = 0.0f;
                     particle.dy = 0.0f;
-                    particle.dvx = 0.0f;
-                    particle.dvy = 0.0f;
+                    // particle.dvx = 0.0f;
+                    // particle.dvy = 0.0f;
                 
                 }
             
@@ -777,84 +823,93 @@ void step_particles(Particle *particles, int count)
             particle.ay = (particle.ay * mag_acc_inv) * MAX_ACCELERATION;
         }
 
-        particle.x += particle.vx * SUBSTEPS_DT * 0.5;
-        particle.y += particle.vy * SUBSTEPS_DT * 0.5;
-        particle.vx += particle.ax * SUBSTEPS_DT;
-        particle.vy += particle.ay * SUBSTEPS_DT;
-        particle.x += particle.vx * SUBSTEPS_DT * 0.5;
-        particle.y += particle.vy * SUBSTEPS_DT * 0.5;
+        // particle.x += particle.vx * SUBSTEPS_DT * 0.5;
+        // particle.y += particle.vy * SUBSTEPS_DT * 0.5;
+        // particle.vx += particle.ax * SUBSTEPS_DT;
+        // particle.vy += particle.ay * SUBSTEPS_DT;
+        // particle.x += particle.vx * SUBSTEPS_DT * 0.5;
+        // particle.y += particle.vy * SUBSTEPS_DT * 0.5;
+        // Verlet integration
+        const float oldx = particle.x;
+        const float oldy = particle.y;
+        particle.x = 2 * particle.x - particle.x_prev + particle.ax * SUBSTEPS_DT * SUBSTEPS_DT;
+        particle.y = 2 * particle.y - particle.y_prev + particle.ay * SUBSTEPS_DT * SUBSTEPS_DT;
+        particle.x_prev = oldx;
+        particle.y_prev = oldy;
         particle.ax = 0.0;
         particle.ay = 0.0;
 
         if (particle.x < XMin)
         {
             particle.x = XMin;
-            particle.vx = -DAMPING * particle.vx;
+            // particle.x = XMin;
+
+            // particle.vx = -DAMPING * particle.vx;
         }
         if (particle.x > XMax)
         {
             particle.x = XMax;
-            particle.vx = -DAMPING * particle.vx;
+            // particle.vx = -DAMPING * particle.vx;
         }
         if (particle.y < YMin)
         {
             particle.y = YMin;
-            particle.vy = -DAMPING * particle.vy;
+            // particle.vy = -DAMPING * particle.vy;
         }
         if (particle.y > YMax)
         {
             particle.y = YMax;
-            particle.vy = -DAMPING * particle.vy;
+            // particle.vy = -DAMPING * particle.vy;
         }
     }
 }
 
-void step_gravity(Particle *particles, int count)
-{
-    // Verlet integration for gravity between particles
-    for (int i = 0; i < count; i++)
-    {
-        Particle &particle = particles[i];
-        float fx = 0.0f;
-        float fy = 0.0f;
+// void step_gravity(Particle *particles, int count)
+// {
+//     // Verlet integration for gravity between particles
+//     for (int i = 0; i < count; i++)
+//     {
+//         Particle &particle = particles[i];
+//         float fx = 0.0f;
+//         float fy = 0.0f;
 
-        for (int j = i; j < count; j++)
-        {
-            if (i == j)
-                continue; // Skip self
+//         for (int j = i; j < count; j++)
+//         {
+//             if (i == j)
+//                 continue; // Skip self
 
-            Particle &other = particles[j];
-            float dx = (other.x - particle.x);
-            float dy = (other.y - particle.y);
-            float dist_sq = dx * dx + dy * dy;
+//             Particle &other = particles[j];
+//             float dx = (other.x - particle.x);
+//             float dy = (other.y - particle.y);
+//             float dist_sq = dx * dx + dy * dy;
 
-            if (dist_sq < 1e-2f)
-                continue; // Avoid division by zero
+//             if (dist_sq < 1e-2f)
+//                 continue; // Avoid division by zero
 
-            const float dist = sqrtf(dist_sq);
-            float force = G * (particle.mass * other.mass) / dist_sq;
-            force = force > MAX_FORCE ? 0 : force; // Limit force to MAX_FORCE
-            particle.ax += force * (dx / dist) / particle.mass;
-            particle.ay += force * (dy / dist) / particle.mass;
-            other.ax -= force * (dx / dist) / other.mass;
-            other.ay -= force * (dy / dist) / other.mass;
-        }
-    }
-    // Update positions and velocities
-    for (int i = 0; i < count; i++)
-    {
-        Particle &particle = particles[i];
-        particle.x += particle.vx * SUBSTEPS_DT * 0.5f;
-        particle.y += particle.vy * SUBSTEPS_DT * 0.5f;
-        // if(i==100) std::cout << "Particle " << i << " position: (" << particle.x/MAGNIFICATION << ", " << particle.y/MAGNIFICATION << ")" << std::endl;
-        particle.vx += particle.ax * SUBSTEPS_DT;
-        particle.vy += particle.ay * SUBSTEPS_DT;
-        particle.x += particle.vx * SUBSTEPS_DT * 0.5f;
-        particle.y += particle.vy * SUBSTEPS_DT * 0.5f;
-        particle.ax = 0.0f;
-        particle.ay = 0.0f;
-    }
-}
+//             const float dist = sqrtf(dist_sq);
+//             float force = G * (particle.mass * other.mass) / dist_sq;
+//             force = force > MAX_FORCE ? 0 : force; // Limit force to MAX_FORCE
+//             particle.ax += force * (dx / dist) / particle.mass;
+//             particle.ay += force * (dy / dist) / particle.mass;
+//             other.ax -= force * (dx / dist) / other.mass;
+//             other.ay -= force * (dy / dist) / other.mass;
+//         }
+//     }
+//     // Update positions and velocities
+//     for (int i = 0; i < count; i++)
+//     {
+//         Particle &particle = particles[i];
+//         particle.x += particle.vx * SUBSTEPS_DT * 0.5f;
+//         particle.y += particle.vy * SUBSTEPS_DT * 0.5f;
+//         // if(i==100) std::cout << "Particle " << i << " position: (" << particle.x/MAGNIFICATION << ", " << particle.y/MAGNIFICATION << ")" << std::endl;
+//         particle.vx += particle.ax * SUBSTEPS_DT;
+//         particle.vy += particle.ay * SUBSTEPS_DT;
+//         particle.x += particle.vx * SUBSTEPS_DT * 0.5f;
+//         particle.y += particle.vy * SUBSTEPS_DT * 0.5f;
+//         particle.ax = 0.0f;
+//         particle.ay = 0.0f;
+//     }
+// }
 
 void sync_shapes(Particle *particles, sf::CircleShape *shapes, int count)
 {
@@ -892,7 +947,7 @@ int main()
             // Perform substeps
             // step_gravity(particles, PARTICLE_COUNT);
             // compute_forces_naive(particles_main, PARTICLE_COUNT);
-            print("Performing Barnes-Hut algorithm...");
+            // print("Performing Barnes-Hut algorithm...");
             perform_barnes_hut(particles_main, tree_array_main, PARTICLE_COUNT, THETA);
             TIMEIT(step_particles(particles_main, PARTICLE_COUNT), "Stepping particles");
         }
