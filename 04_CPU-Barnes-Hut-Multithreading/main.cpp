@@ -8,7 +8,7 @@
 // g++ main.cpp -o grav -lsfml-graphics -lsfml-window -lsfml-system -fopenmp
 
 // Simulation properties
-#define PARTICLE_COUNT 5000
+#define PARTICLE_COUNT 1000
 #define CLOUD_VEL_MULTIPLIER 1.0f
 #define RAD 2.0f
 #define dRad 0.0f
@@ -18,20 +18,20 @@
 #define YMax 800.0f
 #define INNER_RADII 0.2f
 #define OUTER_RADII 0.9f
-#define COLLISION_RADIUS_MULTIPLER 1.1f
+#define COLLISION_RADIUS_MULTIPLER 2.0f
 
 #define MAGNIFICATION 1.0f
 #define MASS 100.0f
-#define CENTER_MASS MASS
+#define CENTER_MASS 500000.0f
 #define CENTER_MASS_COUNT 2
 #define D_CENTER 15.0f
 #define DAMPING 0.4f
-#define SUBSTEPS 1
+#define SUBSTEPS 10
 
-#define INTERNAL_ELASTICITY 0.0
+#define INTERNAL_ELASTICITY 1.0
 
 // Numerical properties
-#define SUBSTEPS_DT 0.005
+#define SUBSTEPS_DT 0.001
 #define MAXIMUM_TREE_SIZE (10 * PARTICLE_COUNT)
 #define THETA 0.5f
 #define SOFTENING_EPSILON 0.01f
@@ -51,7 +51,7 @@
 // Timer timer = Timer(message, 0);       \ 
 
 // Physics properties
-#define G 0.10f
+#define G (100*0.10f)
 #define RAD_MASS_CONSTANT 10.0f
 #define RAD_LUMINOSITY 100.0f
 
@@ -131,36 +131,6 @@ struct Timer
     }
 };
 
-/*
-Getting bounding box took: 0.011053ms
-Computing center of mass took: 0.100798ms
-Stepping particles took: 0.045684ms
-Constructing trees took: 0.501047ms
-Getting bounding box took: 0.009981ms
-Stepping particles took: 0.042204ms
-Getting bounding box took: 0.010204ms
-Computing center of mass took: 0.108893ms
-Constructing trees took: 0.502459ms
-Calculating accelerations took: 2.87496ms
-Stepping particles took: 0.045441ms
-Calculating accelerations took: 2.86933ms
-Calculating accelerations took: 2.8663ms
-Calculating accelerations took: 2.90329ms
-Stepping particles took: 0.045774ms
-Constructing trees took: 0.498962ms
-Computing center of mass took: 0.105516ms
-Computing center of mass took: 0.102982ms
-Constructing trees took: 0.461899ms
-Stepping particles took: 0.046573ms
-Getting bounding box took: 0.00996ms
-Constructing trees took: 0.464559ms
-Computing center of mass took: 0.107422ms
-Calculating accelerations took: 2.8717ms
-Getting bounding box took: 0.010902ms
-Stepping particles took: 0.046011ms
-Constructing trees took: 0.531166ms
-Computing center of mass took: 0.109073ms
-*/
 
 Particle *particles_main = new Particle[PARTICLE_COUNT];
 sf::CircleShape *pshape_main = new sf::CircleShape[PARTICLE_COUNT];
@@ -184,97 +154,6 @@ void print2(auto message)
 
 // Supplementary functions
 
-void init_particles(Particle *particles, sf::CircleShape *shapes, int count)
-{
-    const float center_x = (XMax + XMin) * 0.5f;
-    const float center_y = (YMax + YMin) * 0.5f;
-    const float span_x = (XMax - XMin) * 0.5f;
-    const float span_y = (YMax - YMin) * 0.5f;
-    const float span = (span_x > span_y ? span_x : span_y);
-    for (int i = 0; i < count; i++)
-    {
-        Particle &particle = particles[i];
-        sf::CircleShape &shape = shapes[i];
-        // particle.x = randf(XMin*MAGNIFICATION, XMax*MAGNIFICATION);
-        // particle.y = randf(YMin*MAGNIFICATION, YMax*MAGNIFICATION);
-        // Initialize velocity to be in stable circular motion. centripital == gravitational force
-        // float angle = randf(0.0f, 2.0f * 3.14159265358979323846f);
-
-        float x = center_x + randf(-OUTER_RADII * span_x, OUTER_RADII * span_x);
-        float y = center_y + randf(-OUTER_RADII * span_y, OUTER_RADII * span_y);
-        while ((NORM2(x - center_x, y - center_y) < SQ(INNER_RADII * span)) || NORM2(x - center_x, y - center_y) > SQ(OUTER_RADII * span))
-        {
-            x = center_x + randf(-OUTER_RADII * span_x, OUTER_RADII * span_x);
-            y = center_y + randf(-OUTER_RADII * span_y, OUTER_RADII * span_y);
-        }
-        // const float radius = randf(INNER_RADII * (XMax - XMin) * 0.5f, OUTER_RADII * (XMax - XMin) * 0.5f); // Use half the width as radius
-        particle.x = x;
-        particle.y = y;
-        // particle.x = ((XMax + XMin) / 2.0f + radius * cosf(angle));
-        // particle.y = ((YMax + YMin) / 2.0f + radius * sinf(angle));
-        // particle.x = (XMax + XMin) / 2.0f + RAD * cosf(angle);
-        // particle.y = (YMax + YMin) / 2.0f + RAD * sinf(angle);
-        float angle = atan2f(y - center_y, x - center_x);                                                                           // Angle from the center to the particle
-        float speed = CLOUD_VEL_MULTIPLIER * sqrtf(G * CENTER_MASS * CENTER_MASS_COUNT / sqrtf(NORM2(x - center_x, y - center_y))); // Speed for stable circular motion
-        
-        const double vx = speed * sin(angle);
-        const double vy = -speed * cos(angle);
-        particle.x_prev = particle.x - vx * SUBSTEPS_DT; // Previous position for Verlet integration
-        particle.y_prev = particle.y - vy * SUBSTEPS_DT;
-
-        // particle.x_prev = particle.x; // Previous position for Verlet integration
-        // particle.y_prev = particle.y;
-
-        particle.ax = 0.0;
-        particle.ay = 0.0;
-
-        particle.dx = 0.0;
-        particle.dy = 0.0;
-        // particle.dvx = 0.0;
-        // particle.dvy = 0.0;
-        particle.rad = RAD + randf(-dRad, dRad);
-
-        // particle.mass = RAD_MASS_CONSTANT * particle.rad * particle.rad;
-        particle.mass = MASS;
-        shape.setRadius(particle.rad);
-        shape.setOrigin(particle.rad, particle.rad);
-        shape.setPosition(particle.x, particle.y);
-#ifdef RAD_LUMINOSITY
-        shape.setFillColor(sf::Color(255, 255, 255, (int)round(SQ(particles[i].rad) * RAD_LUMINOSITY)));
-#else
-        shape.setFillColor(sf::Color::White);
-#endif
-    }
-    particles[0].x = D_CENTER + ((XMax + XMin) / 2.0f);
-    particles[0].y = ((YMax + YMin) / 2.0f);
-    particles[1].x = -D_CENTER + ((XMax + XMin) / 2.0f);
-    particles[1].y = ((YMax + YMin) / 2.0f);
-    float vy = sqrtf(G * CENTER_MASS / (4* D_CENTER));
-    vy*= -1;
-    particles[1].y_prev = particles[1].y - vy * SUBSTEPS_DT; // Previous position for Verlet integration
-    particles[1].x_prev = particles[1].x; // Previous position for Verlet integration
-
-    // particles[0].vy = -particles[1].vy;
-    vy = -vy; // Reverse the velocity for the second particle
-    particles[0].y_prev = particles[0].y - vy * SUBSTEPS_DT; // Previous position for Verlet integration
-    particles[0].x_prev = particles[0].x; // Previous position for Verlet integration
-    for (int i = 0; i < 2; i++)
-    {
-        particles[i].rad = 5 * RAD;
-        particles[i].mass = CENTER_MASS;
-        // particles[i].vx = 0.0f;
-        // particles[i].x_prev = particles[i].x;
-        particles[i].ax = 0.0f;
-        particles[i].ay = 0.0f;
-        shapes[i].setRadius(particles[i].rad);
-        shapes[i].setOrigin(particles[i].rad, particles[i].rad);
-        shapes[i].setPosition(particles[i].x, particles[i].y);
-
-        shapes[i].setFillColor(sf::Color::Red);
-    }
-
-    std::cout << "Particles initialized." << std::endl;
-}
 void compute_forces_naive(Particle *particles, int count)
 {
     // Compute forces between particles
@@ -726,16 +605,16 @@ void handle_collision_particle(Particle *particles, const Node *tree_array, cons
                 const double inv_dist = 1.0 / sqrtf(dist_sq);
                 const double dR = (particle.rad + other.rad) - 1.0 / inv_dist;
                 const double mass_ratio = other.mass / (other.mass + particle.mass);
-                std::cout<<mass_ratio<<std::endl;
+                // std::cout<<mass_ratio<<std::endl;
                 // const double relative_vx = other.vx - particle.vx;
                 // const double relative_vy = other.vy - particle.vy;
                 // const double dV = ((relative_vx * dx + relative_vy * dy) * inv_dist) * (1 + INTERNAL_ELASTICITY) * (mass_ratio);
                 const double nx = dx * inv_dist;
                 const double ny = dy * inv_dist;
-                particle.x -= (nx) * dR * mass_ratio;
-                particle.y -= (ny) * dR * mass_ratio;
-                other.x += (nx) * dR * (1 - mass_ratio);
-                other.y += (ny) * dR * (1 - mass_ratio);
+                particle.x -= (nx) * dR * mass_ratio*(1+INTERNAL_ELASTICITY);
+                particle.y -= (ny) * dR * mass_ratio*(1+INTERNAL_ELASTICITY);
+                other.x += (nx) * dR * (1 - mass_ratio)*(1+INTERNAL_ELASTICITY);
+                other.y += (ny) * dR * (1 - mass_ratio)*(1+INTERNAL_ELASTICITY);
                 // particle.dvx += (dx * inv_dist) * dV;
                 // particle.dvy += (dy * inv_dist) * dV;
             }
@@ -786,26 +665,19 @@ void handle_collisions(Particle *particles, const Node *tree_array, const int pc
             }
         }
 }
-
-void perform_barnes_hut(Particle *particles, Node *tree_array, const int pcount, const float theta)
+void stop_particles(Particle *particles, int count)
 {
-    float bounds[3];
-    print("Performing Barnes-Hut algorithm...");
-    TIMEIT(get_bounding_box(particles, pcount, bounds), "Getting bounding box");
-    print("Constructing trees...");
-
-    TIMEIT(tree_array_main = construct_trees(particles, tree_array_main, pcount, bounds), "Constructing trees");
-    print("Tree checking...");
-    print(tree_array_main[0].valid ? "Root node is valid." : "Root node is not valid.");
-    const int ncount = current_available_index;
-    print("Trees constructed successfully. Number of nodes: " + std::to_string(ncount));
-    print("Computing center of mass for nodes...");
-    TIMEIT(computer_tree_coms(particles, tree_array_main, pcount, ncount), "Computing center of mass");
-    print("Center of mass computed successfully.");
-    print("Calculating accelerations using Barnes-Hut algorithm...");
-    TIMEIT(calculate_accelerations_barnes_hut(particles, tree_array_main, pcount, ncount, theta), "Calculating accelerations");
-    TIMEIT(handle_collisions(particles, tree_array_main, pcount, ncount, COLLISION_HANDLING_PER_ITERATION), "Handling collisions");
-    print("Accelerations calculated successfully.");
+    // Stop particles by setting their velocities to zero
+    for (int i = 0; i < count; i++)
+    {
+        Particle &particle = particles[i];
+        particle.ax = 0.0f;
+        particle.ay = 0.0f;
+        particle.dx = 0.0f;
+        particle.dy = 0.0f;
+        particle.x_prev = particle.x;
+        particle.y_prev = particle.y;
+    }
 }
 
 void step_particles(Particle *particles, int count)
@@ -863,6 +735,180 @@ void step_particles(Particle *particles, int count)
         }
     }
 }
+void init_particles(Particle *particles, sf::CircleShape *shapes, int count)
+{
+    const float center_x = (XMax + XMin) * 0.5f;
+    const float center_y = (YMax + YMin) * 0.5f;
+    const float span_x = (XMax - XMin) * 0.5f;
+    const float span_y = (YMax - YMin) * 0.5f;
+    const float span = (span_x > span_y ? span_x : span_y);
+    for (int i = 0; i < count; i++)
+    {
+        Particle &particle = particles[i];
+        
+        // particle.x = randf(XMin*MAGNIFICATION, XMax*MAGNIFICATION);
+        // particle.y = randf(YMin*MAGNIFICATION, YMax*MAGNIFICATION);
+        // Initialize velocity to be in stable circular motion. centripital == gravitational force
+        // float angle = randf(0.0f, 2.0f * 3.14159265358979323846f);
+
+        float x = center_x + randf(-OUTER_RADII * span_x, OUTER_RADII * span_x);
+        float y = center_y + randf(-OUTER_RADII * span_y, OUTER_RADII * span_y);
+        while ((NORM2(x - center_x, y - center_y) < SQ(INNER_RADII * span)) || NORM2(x - center_x, y - center_y) > SQ(OUTER_RADII * span))
+        {
+            x = center_x + randf(-OUTER_RADII * span_x, OUTER_RADII * span_x);
+            y = center_y + randf(-OUTER_RADII * span_y, OUTER_RADII * span_y);
+        }
+        // const float radius = randf(INNER_RADII * (XMax - XMin) * 0.5f, OUTER_RADII * (XMax - XMin) * 0.5f); // Use half the width as radius
+        particle.x = x;
+        particle.y = y;
+        particle.x_prev = particle.x; 
+        particle.y_prev = particle.y; 
+    }
+    const float initial_iterations = 10;
+    for(int i = 0; i < initial_iterations; i++)
+    {
+        float bounds[3];
+        get_bounding_box(particles, count, bounds);
+        tree_array_main = construct_trees(particles, tree_array_main, count, bounds);
+        // print(tree_array_main[0].valid ? "Root node is valid." : "Root node is not valid.");
+        const int ncount = current_available_index;
+        computer_tree_coms(particles, tree_array_main, count, ncount);
+        handle_collisions(particles, tree_array_main, count, ncount, COLLISION_HANDLING_PER_ITERATION);
+        
+
+    }
+    for(int i =0; i<10; i++){
+    step_particles(particles, count);
+    }
+    stop_particles(particles, count);
+    
+    for(int i = 0; i < count; i++){
+        Particle &particle = particles[i];
+        sf::CircleShape &shape = shapes[i];
+
+        // particle.x = ((XMax + XMin) / 2.0f + radius * cosf(angle));
+        // particle.y = ((YMax + YMin) / 2.0f + radius * sinf(angle));
+        // particle.x = (XMax + XMin) / 2.0f + RAD * cosf(angle);
+        // particle.y = (YMax + YMin) / 2.0f + RAD * sinf(angle);
+        float angle = atan2f(particle.y - center_y, particle.x - center_x);                                                                           // Angle from the center to the particle
+        float speed = CLOUD_VEL_MULTIPLIER * sqrtf(G * CENTER_MASS * CENTER_MASS_COUNT / sqrtf(NORM2(particle.x - center_x, particle.y - center_y))); // Speed for stable circular motion
+        
+        const double vx = speed * sin(angle);
+        const double vy = -speed * cos(angle);
+        particle.x_prev = particle.x - vx * SUBSTEPS_DT; // Previous position for Verlet integration
+        particle.y_prev = particle.y - vy * SUBSTEPS_DT;
+
+        // particle.x_prev = particle.x; // Previous position for Verlet integration
+        // particle.y_prev = particle.y;
+
+        particle.ax = 0.0;
+        particle.ay = 0.0;
+
+        particle.dx = 0.0;
+        particle.dy = 0.0;
+        // particle.dvx = 0.0;
+        // particle.dvy = 0.0;
+        particle.rad = RAD + randf(-dRad, dRad);
+
+        // particle.mass = RAD_MASS_CONSTANT * particle.rad * particle.rad;
+        particle.mass = MASS;
+        shape.setRadius(particle.rad);
+        shape.setOrigin(particle.rad, particle.rad);
+        shape.setPosition(particle.x, particle.y);
+#ifdef RAD_LUMINOSITY
+        shape.setFillColor(sf::Color(255, 255, 255, (int)round(SQ(particles[i].rad) * RAD_LUMINOSITY)));
+#else
+        shape.setFillColor(sf::Color::White);
+#endif
+    }
+    particles[0].x = D_CENTER + ((XMax + XMin) / 2.0f);
+    particles[0].y = ((YMax + YMin) / 2.0f);
+    particles[1].x = -D_CENTER + ((XMax + XMin) / 2.0f);
+    particles[1].y = ((YMax + YMin) / 2.0f);
+    float vy = sqrtf(G * CENTER_MASS / (4* D_CENTER));
+    vy*= -1;
+    particles[1].y_prev = particles[1].y - vy * SUBSTEPS_DT; // Previous position for Verlet integration
+    particles[1].x_prev = particles[1].x; // Previous position for Verlet integration
+
+    // particles[0].vy = -particles[1].vy;
+    vy = -vy; // Reverse the velocity for the second particle
+    particles[0].y_prev = particles[0].y - vy * SUBSTEPS_DT; // Previous position for Verlet integration
+    particles[0].x_prev = particles[0].x; // Previous position for Verlet integration
+    for (int i = 0; i < 2; i++)
+    {
+        particles[i].rad = 5 * RAD;
+        particles[i].mass = CENTER_MASS;
+        // particles[i].vx = 0.0f;
+        // particles[i].x_prev = particles[i].x;
+        particles[i].ax = 0.0f;
+        particles[i].ay = 0.0f;
+        shapes[i].setRadius(particles[i].rad);
+        shapes[i].setOrigin(particles[i].rad, particles[i].rad);
+        shapes[i].setPosition(particles[i].x, particles[i].y);
+
+        shapes[i].setFillColor(sf::Color::Red);
+    }
+
+    std::cout << "Particles initialized." << std::endl;
+}
+
+void init_velocities(Particle *particles, int count)
+{
+        const float center_x = (XMax + XMin) * 0.5f;
+    const float center_y = (YMax + YMin) * 0.5f;
+    const float span_x = (XMax - XMin) * 0.5f;
+    const float span_y = (YMax - YMin) * 0.5f;
+    // Initialize velocities for particles
+    for(int i = 0; i < count; i++){
+        Particle &particle = particles[i];
+
+        // particle.x = ((XMax + XMin) / 2.0f + radius * cosf(angle));
+        // particle.y = ((YMax + YMin) / 2.0f + radius * sinf(angle));
+        // particle.x = (XMax + XMin) / 2.0f + RAD * cosf(angle);
+        // particle.y = (YMax + YMin) / 2.0f + RAD * sinf(angle);
+        float angle = atan2f(particle.y - center_y, particle.x - center_x);                                                                           // Angle from the center to the particle
+        float speed = CLOUD_VEL_MULTIPLIER * sqrtf(G * CENTER_MASS * CENTER_MASS_COUNT / sqrtf(NORM2(particle.x - center_x, particle.y - center_y))); // Speed for stable circular motion
+        
+        const double vx = speed * sin(angle);
+        const double vy = -speed * cos(angle);
+        particle.x_prev = particle.x - vx * SUBSTEPS_DT; // Previous position for Verlet integration
+        particle.y_prev = particle.y - vy * SUBSTEPS_DT;
+
+        // particle.x_prev = particle.x; // Previous position for Verlet integration
+        // particle.y_prev = particle.y;
+
+        particle.ax = 0.0;
+        particle.ay = 0.0;
+
+        particle.dx = 0.0;
+        particle.dy = 0.0;
+
+    }
+    particles[0].x = D_CENTER + ((XMax + XMin) / 2.0f);
+    particles[0].y = ((YMax + YMin) / 2.0f);
+    particles[1].x = -D_CENTER + ((XMax + XMin) / 2.0f);
+    particles[1].y = ((YMax + YMin) / 2.0f);
+    float vy = sqrtf(G * CENTER_MASS / (4* D_CENTER));
+    vy*= -1;
+    particles[1].y_prev = particles[1].y - vy * SUBSTEPS_DT; // Previous position for Verlet integration
+    particles[1].x_prev = particles[1].x; // Previous position for Verlet integration
+
+    // particles[0].vy = -particles[1].vy;
+    vy = -vy; // Reverse the velocity for the second particle
+    particles[0].y_prev = particles[0].y - vy * SUBSTEPS_DT; // Previous position for Verlet integration
+    particles[0].x_prev = particles[0].x; // Previous position for Verlet integration
+    for (int i = 0; i < 2; i++)
+    {
+        particles[i].rad = 5 * RAD;
+        particles[i].mass = CENTER_MASS;
+        // particles[i].vx = 0.0f;
+        // particles[i].x_prev = particles[i].x;
+        particles[i].ax = 0.0f;
+        particles[i].ay = 0.0f;
+       
+    }
+}
+
 
 // void step_gravity(Particle *particles, int count)
 // {
@@ -919,6 +965,34 @@ void sync_shapes(Particle *particles, sf::CircleShape *shapes, int count)
         sf::CircleShape &shape = shapes[i];
         shape.setPosition(particle.x, particle.y);
     }
+}
+
+
+int count = 0;
+void perform_barnes_hut(Particle *particles, Node *tree_array, const int pcount, const float theta)
+{
+    float bounds[3];
+    print("Performing Barnes-Hut algorithm...");
+    TIMEIT(get_bounding_box(particles, pcount, bounds), "Getting bounding box");
+    print("Constructing trees...");
+
+    TIMEIT(tree_array_main = construct_trees(particles, tree_array_main, pcount, bounds), "Constructing trees");
+    print("Tree checking...");
+    print(tree_array_main[0].valid ? "Root node is valid." : "Root node is not valid.");
+    const int ncount = current_available_index;
+    print("Trees constructed successfully. Number of nodes: " + std::to_string(ncount));
+    print("Computing center of mass for nodes...");
+    TIMEIT(computer_tree_coms(particles, tree_array_main, pcount, ncount), "Computing center of mass");
+    print("Center of mass computed successfully.");
+    print("Calculating accelerations using Barnes-Hut algorithm...");
+    TIMEIT(calculate_accelerations_barnes_hut(particles, tree_array_main, pcount, ncount, theta), "Calculating accelerations");
+    TIMEIT(handle_collisions(particles, tree_array_main, pcount, ncount, COLLISION_HANDLING_PER_ITERATION), "Handling collisions");
+    print("Accelerations calculated successfully.");
+    if(count==10){
+        stop_particles(particles, pcount);
+        init_velocities(particles, pcount);
+    }
+    count++;
 }
 
 int main()
